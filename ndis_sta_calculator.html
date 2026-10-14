@@ -1,0 +1,2561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NDIS Short Term Accommodation (STA) Calculator</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="Core_Funding_Calculator_32x32.png">
+    <link rel="apple-touch-icon" href="Core_Funding_Calculator_512x512.png">
+
+    <script>
+        tailwind = {
+            config: {
+                darkMode: 'class',
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ['Inter', 'sans-serif'],
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+        body, .bg-white, .bg-gray-50, .bg-gray-100, .text-gray-800, .text-gray-700, .border-gray-200 {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out, border-color 0.3s ease-in-out;
+        }
+        body {
+            background-color: #f3f4f6;
+        }
+        .page {
+            min-height: 100vh;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        input[type="date"], input[type="time"], select {
+            transition: all 0.2s ease-in-out;
+            border: 1px solid #e5e7eb;
+        }
+        input:focus, select:focus {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(20, 184, 166, 0.15), 0 2px 4px -1px rgba(20, 184, 166, 0.08);
+            border-color: #0d9488;
+            outline: none;
+        }
+
+        .floating-calculator-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #0d9488, #0f766e);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            box-shadow: 0 8px 16px rgba(13, 148, 136, 0.35);
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .floating-calculator-btn:hover {
+            transform: scale(1.1) rotate(5deg);
+        }
+        .calculator-container {
+            position: fixed;
+            bottom: 6.5rem;
+            right: 2rem;
+            width: 310px;
+            background-color: #000000;
+            border-radius: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            transform-origin: bottom right;
+            transform: scale(0);
+            opacity: 0;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+            z-index: 999;
+            pointer-events: none;
+            padding-bottom: 20px;
+        }
+        .calculator-container.open {
+            transform: scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .calculator-display {
+            background-color: #000000;
+            color: white;
+            text-align: right;
+            padding: 24px 20px 10px;
+        }
+        .calculator-history {
+            font-size: 1rem;
+            color: #a1a1aa;
+            height: 24px;
+            margin-bottom: 4px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            display: flex;
+            justify-content: flex-end;
+            align-items: flex-end;
+        }
+        .calculator-current-input {
+            font-size: 3.2rem;
+            font-weight: 300;
+            line-height: 1;
+            word-break: break-all;
+            color: white;
+        }
+        .calculator-buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            padding: 0 16px;
+            background-color: #000000;
+        }
+        .calc-btn {
+            border: none;
+            border-radius: 50%;
+            width: 56px;
+            height: 56px;
+            font-size: 1.35rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: filter 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            color: white;
+            background-color: #333333;
+        }
+        .calc-btn:active {
+            filter: brightness(1.3);
+            transform: scale(0.95);
+        }
+        .calc-btn.operator { background-color: #ff9f0a; color: white; }
+        .calc-btn.function { background-color: #a5a5a5; color: black; font-weight: 600; }
+        .calc-btn.zero {
+            grid-column: span 2;
+            width: 124px;
+            border-radius: 35px;
+            justify-content: flex-start;
+            padding-left: 22px;
+        }
+
+        #darkModeCheckbox:checked ~ svg .toggle-track { fill: #1e293b !important; }
+        #darkModeCheckbox:checked ~ svg .toggle-stars { opacity: 1 !important; transform: translateY(0) !important; }
+        #darkModeCheckbox:checked ~ svg .toggle-clouds { opacity: 0 !important; transform: translateY(-4px) !important; }
+        #darkModeCheckbox:checked ~ svg .toggle-thumb { transform: translate(48px, 16px) !important; }
+        #darkModeCheckbox:checked ~ svg .toggle-body { fill: #cbd5e1 !important; }
+        #darkModeCheckbox:checked ~ svg .toggle-craters { opacity: 1 !important; }
+
+        body.dark {
+            background-color: #111827;
+            color: #f3f4f6;
+        }
+        body.dark .bg-white { background-color: #1f2937 !important; }
+        body.dark .bg-gray-50, body.dark .bg-gray-100 { background-color: #111827 !important; }
+        body.dark .text-gray-800 { color: #f9fafb !important; }
+        body.dark .text-gray-700 { color: #e5e7eb !important; }
+        body.dark .text-gray-600 { color: #d1d5db !important; }
+        body.dark .text-gray-500 { color: #9ca3af !important; }
+        body.dark .border-gray-100, body.dark .border-gray-200 { border-color: #374151 !important; }
+        body.dark input, body.dark select {
+            background-color: #374151 !important;
+            border-color: #4b5563 !important;
+            color: #f9fafb !important;
+        }
+
+        .calendar-container {
+            background: #fff;
+            border-radius: 1rem;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        .calendar-header {
+            background: #ffffff;
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background-color: #e5e7eb;
+            padding: 1px;
+        }
+        .calendar-day-name {
+            font-weight: 600;
+            font-size: 0.75rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            padding: 0.6rem 0;
+            text-align: center;
+            background-color: #f9fafb;
+        }
+        .calendar-day {
+            min-height: 68px;
+            background-color: #fff;
+            padding: 0.4rem;
+            transition: all 0.2s ease;
+            position: relative;
+            cursor: pointer;
+        }
+        .calendar-day:hover:not(.disabled) {
+            background-color: #f0fdfa;
+            z-index: 10;
+        }
+        .calendar-day.in-range:not(.selected) {
+            background-color: #f0fdfa;
+        }
+        .calendar-day.today .day-number {
+            background: linear-gradient(135deg, #0d9488, #0f766e);
+            box-shadow: 0 2px 4px rgba(13, 148, 136, 0.3);
+            color: white !important;
+            width: 24px;
+            height: 24px;
+            font-size: 0.75rem;
+        }
+        .calendar-day.selected {
+            background-color: #ccfbf1 !important;
+            box-shadow: inset 0 0 0 2px #0d9488;
+        }
+        .dot-indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .dot-service { background-color: #10b981; }
+        .dot-holiday { background-color: #ef4444; }
+        .dot-midnight { background-color: #ec4899; }
+
+        .service-block {
+            position: absolute;
+            border-radius: 6px;
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+            backdrop-filter: blur(4px);
+            z-index: 20;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+        .service-block:hover {
+            z-index: 30;
+            transform: scale(1.02);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+        }
+
+        body.dark .calendar-container {
+            background-color: #1f2937;
+            border-color: #374151;
+        }
+        body.dark .calendar-header {
+            background-color: #1f2937;
+            border-bottom-color: #374151;
+        }
+        body.dark .calendar-grid {
+            background-color: #374151;
+        }
+        body.dark .calendar-day-name {
+            background-color: #111827;
+            color: #9ca3af;
+        }
+        body.dark .calendar-day {
+            background-color: #1f2937;
+            color: #e5e7eb;
+        }
+        body.dark .calendar-day.in-range:not(.selected) {
+            background-color: rgba(13, 148, 136, 0.12);
+        }
+        body.dark .calendar-day.selected {
+            background-color: rgba(13, 148, 136, 0.28) !important;
+            box-shadow: inset 0 0 0 2px #14b8a6;
+        }
+        body.dark .calendar-day:hover:not(.disabled) {
+            background-color: #374151;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 antialiased font-sans">
+    <div id="calculatorPage" class="page transition-colors duration-200 flex flex-col items-center">
+        <!-- Top Navigation Bar -->
+        <nav class="w-full bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-teal-50 text-teal-600 rounded-xl">
+                            <i class="fas fa-hotel text-lg"></i>
+                        </div>
+                        <span class="font-bold text-gray-800 text-base sm:text-lg tracking-tight">NDIS STA Calculator</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <!-- Custom SVG Theme Toggle -->
+                        <label for="darkModeCheckbox" class="flex items-center cursor-pointer group" title="Toggle Dark Mode">
+                            <input type="checkbox" id="darkModeCheckbox" class="sr-only">
+                            <svg class="w-16 h-8 drop-shadow-sm transition-all duration-500 ease-in-out" viewBox="0 0 64 32" xmlns="http://www.w3.org/2000/svg">
+                                <rect class="toggle-track transition-colors duration-500 ease-in-out" x="0" y="0" width="64" height="32" rx="16" fill="#60a5fa" />
+                                <g class="toggle-stars transition-all duration-500 ease-in-out opacity-0 translate-y-2" fill="#ffffff">
+                                    <path d="M14 10l1-3 1 3 3 1-3 1-1 3-1-3-3-1 3-1z" opacity="0.8"/>
+                                    <path d="M24 18l.5-1.5.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z" opacity="0.6"/>
+                                    <circle cx="20" cy="12" r="1" opacity="0.5"/>
+                                </g>
+                                <g class="toggle-clouds transition-all duration-500 ease-in-out opacity-100 translate-y-0" fill="#ffffff">
+                                    <circle cx="40" cy="18" r="4" opacity="0.9" />
+                                    <circle cx="46" cy="16" r="5" opacity="0.9" />
+                                    <circle cx="52" cy="19" r="3" opacity="0.9" />
+                                    <rect x="40" y="16" width="12" height="6" opacity="0.9" />
+                                </g>
+                                <g class="toggle-thumb transition-transform duration-500 ease-in-out drop-shadow-md" transform="translate(16, 16)">
+                                    <circle class="toggle-glow transition-all duration-500 ease-in-out opacity-0 group-hover:opacity-20" cx="0" cy="0" r="14" fill="#ffffff" />
+                                    <circle class="toggle-body transition-colors duration-500 ease-in-out" cx="0" cy="0" r="11" fill="#facc15" />
+                                    <g class="toggle-craters transition-opacity duration-500 ease-in-out opacity-0" fill="#94a3b8">
+                                        <circle cx="-3" cy="-3" r="2.5" />
+                                        <circle cx="4" cy="2" r="2" />
+                                        <circle cx="-1" cy="5" r="1.5" />
+                                    </g>
+                                </g>
+                            </svg>
+                        </label>
+                        <div class="h-6 w-px bg-gray-300 mx-1"></div>
+                        <button id="exportCsvBtn" class="flex items-center px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-all shadow-sm">
+                            <i class="fas fa-file-csv mr-2 text-teal-600"></i>CSV
+                        </button>
+                        <button id="exportPdfBtn" class="flex items-center px-4 py-2 text-sm font-bold text-white bg-teal-600 rounded-xl hover:bg-teal-700 transition-all shadow-md transform hover:-translate-y-0.5">
+                            <i class="fas fa-file-pdf mr-2"></i>Export PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Calculator Content -->
+        <main class="w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 flex-grow">
+            <div id="calculatorContentPlaceholder"></div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="w-full bg-white border-t border-gray-200 py-4 mt-auto transition-colors z-10">
+            <p class="text-center text-sm font-medium text-gray-500">&copy; 2026 NDIS Short Term Accommodation (STA) Calculator</p>
+        </footer>
+    </div>
+
+    <!-- Floating Calculator -->
+    <div id="floatingCalculatorBtn" class="floating-calculator-btn" title="Quick Calculator">
+        <i class="fas fa-calculator"></i>
+    </div>
+    <div id="calculatorContainer" class="calculator-container">
+        <div class="calculator-display rounded-t-2xl">
+            <div id="calculatorHistory" class="calculator-history"></div>
+            <div id="calculatorCurrentInput" class="calculator-current-input">0</div>
+        </div>
+        <div class="calculator-buttons pb-4">
+            <button class="calc-btn function" data-key="c">AC</button>
+            <button class="calc-btn function" data-key="Backspace">⌫</button>
+            <button class="calc-btn function" data-key="%">%</button>
+            <button class="calc-btn operator" data-key="/">÷</button>
+            <button class="calc-btn" data-key="7">7</button>
+            <button class="calc-btn" data-key="8">8</button>
+            <button class="calc-btn" data-key="9">9</button>
+            <button class="calc-btn operator" data-key="*">×</button>
+            <button class="calc-btn" data-key="4">4</button>
+            <button class="calc-btn" data-key="5">5</button>
+            <button class="calc-btn" data-key="6">6</button>
+            <button class="calc-btn operator" data-key="-">−</button>
+            <button class="calc-btn" data-key="1">1</button>
+            <button class="calc-btn" data-key="2">2</button>
+            <button class="calc-btn" data-key="3">3</button>
+            <button class="calc-btn operator" data-key="+">+</button>
+            <button class="calc-btn zero" data-key="0">0</button>
+            <button class="calc-btn" data-key=".">.</button>
+            <button class="calc-btn operator" data-key="=">=</button>
+        </div>
+    </div>
+
+    <!-- Message Box Modal -->
+    <div id="calcMessageBoxOverlay" class="fixed inset-0 z-[2000] hidden flex-col justify-center items-center backdrop-blur-sm bg-black/40">
+        <div id="calcMessageBoxContent" class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center transform transition-all scale-100">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-teal-100 mb-4">
+                <i class="fas fa-info text-teal-600 text-lg"></i>
+            </div>
+            <p id="calcMessageBoxText" class="text-gray-600 mb-6 text-base font-medium"></p>
+            <button id="calcMessageBoxButton" class="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 px-4 rounded-xl transition-colors">OK</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================================
+        // 1. STA PRICING SCHEDULE (2026-27 NDIS Pricing Schedule)
+        // ============================================================================
+        // Rules:
+        // - 06:00 to 22:00: Hourly STA Standard rates (Weekday Daytime 06:00-20:00, Weekday Evening 20:00-22:00, Sat, Sun, Public Holiday)
+        // - 22:00 to 06:00 (next day): ALWAYS STA - Sleepover (NO Night Rate)
+        // - Every 00:00 (midnight) crossed: 1 Day Participant Accommodation + 1 Day Support Worker Accommodation
+        const STA_CATALOG = {
+            "Weekday Daytime": {
+                code: "01_200_0115_1_1",
+                name: "Short Term Accommodation - Standard - Weekday Daytime",
+                shortName: "STA - Standard - Weekday Daytime",
+                unit: "Hour",
+                National: 73.58,
+                Remote: 103.01,
+                "Very Remote": 110.37,
+                swRateKey: "weekday",
+                swRateLabel: "Weekday rate",
+                badgeClass: "bg-blue-100 text-blue-800 border-blue-200",
+                blockColor: "bg-blue-500"
+            },
+            "Weekday Evening": {
+                code: "01_201_0115_1_1",
+                name: "Short Term Accommodation - Standard - Weekday Evening",
+                shortName: "STA - Standard - Weekday Evening",
+                unit: "Hour",
+                National: 81.07,
+                Remote: 113.50,
+                "Very Remote": 121.61,
+                swRateKey: "afternoon",
+                swRateLabel: "Afternoon",
+                badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-200",
+                blockColor: "bg-indigo-500"
+            },
+            "Saturday": {
+                code: "01_202_0115_1_1",
+                name: "Short Term Accommodation - Standard - Saturday",
+                shortName: "STA - Standard - Saturday",
+                unit: "Hour",
+                National: 103.54,
+                Remote: 144.96,
+                "Very Remote": 155.31,
+                swRateKey: "saturday",
+                swRateLabel: "Saturday",
+                badgeClass: "bg-purple-100 text-purple-800 border-purple-200",
+                blockColor: "bg-purple-500"
+            },
+            "Sunday": {
+                code: "01_203_0115_1_1",
+                name: "Short Term Accommodation - Standard - Sunday",
+                shortName: "STA - Standard - Sunday",
+                unit: "Hour",
+                National: 133.50,
+                Remote: 186.90,
+                "Very Remote": 200.25,
+                swRateKey: "sunday",
+                swRateLabel: "Sunday",
+                badgeClass: "bg-amber-100 text-amber-800 border-amber-200",
+                blockColor: "bg-amber-500"
+            },
+            "Public Holiday": {
+                code: "01_204_0115_1_1",
+                name: "Short Term Accommodation - Standard - Public Holiday",
+                shortName: "STA - Standard - Public Holiday",
+                unit: "Hour",
+                National: 163.46,
+                Remote: 228.84,
+                "Very Remote": 245.19,
+                swRateKey: "publicHoliday",
+                swRateLabel: "Public holiday",
+                badgeClass: "bg-red-100 text-red-800 border-red-200",
+                blockColor: "bg-red-500"
+            },
+            "Sleepover": {
+                code: "01_206_0115_1_1",
+                name: "Short Term Accommodation - Sleepover",
+                shortName: "STA - Sleepover",
+                unit: "Each",
+                National: 311.79,
+                Remote: 436.51,
+                "Very Remote": 467.69,
+                swRateKey: "sleepover",
+                swRateLabel: "Sleepover",
+                badgeClass: "bg-teal-100 text-teal-800 border-teal-200",
+                blockColor: "bg-teal-700"
+            },
+            "Participant Accommodation": {
+                code: "01_250_0115_1_1",
+                name: "Short Term Accommodation - Participant Accommodation",
+                shortName: "STA - Participant Accommodation",
+                unit: "Day",
+                National: 162.85,
+                Remote: 227.99,
+                "Very Remote": 244.28,
+                swRateKey: null,
+                swRateLabel: "N/A (Accom)",
+                badgeClass: "bg-pink-100 text-pink-800 border-pink-200",
+                blockColor: "bg-pink-500"
+            },
+            "Support Worker Accommodation": {
+                code: "01_251_0115_1_1",
+                name: "Short Term Accommodation - Support Worker Accommodation",
+                shortName: "STA - Support Worker Accommodation",
+                unit: "Day",
+                National: 162.85,
+                Remote: 227.99,
+                "Very Remote": 244.28,
+                swRateKey: null,
+                swRateLabel: "N/A (Accom)",
+                badgeClass: "bg-rose-100 text-rose-800 border-rose-200",
+                blockColor: "bg-rose-500"
+            }
+        };
+
+        // ============================================================================
+        // 1B. SUPPORT WORKER PAY POINTS SCHEDULE (NEW RATES)
+        // ============================================================================
+        const SW_PAY_POINTS = {
+            "A": {
+                code: "A",
+                classification: "Level 1 - pay point 1",
+                weekday: 34.44,
+                saturday: 48.21,
+                sunday: 61.99,
+                publicHoliday: 75.76,
+                afternoon: 37.88,
+                night: 38.57,
+                sleepover: 122.13
+            },
+            "B": {
+                code: "B",
+                classification: "Level 1 - pay point 2",
+                weekday: 35.55,
+                saturday: 49.77,
+                sunday: 63.99,
+                publicHoliday: 78.21,
+                afternoon: 39.11,
+                night: 39.82,
+                sleepover: 125.75
+            },
+            "C": {
+                code: "C",
+                classification: "Level 1 - pay point 3",
+                weekday: 36.81,
+                saturday: 51.54,
+                sunday: 66.26,
+                publicHoliday: 80.99,
+                afternoon: 40.49,
+                night: 41.23,
+                sleepover: 129.38
+            },
+            "C1": {
+                code: "C1",
+                classification: "Level 1 - pay point 3.5 (10% raise)",
+                weekday: 40.49,
+                saturday: 56.69,
+                sunday: 72.89,
+                publicHoliday: 89.09,
+                afternoon: 44.54,
+                night: 45.35,
+                sleepover: 142.31
+            },
+            "D": {
+                code: "D",
+                classification: "Level 2 - pay point 1",
+                weekday: 45.28,
+                saturday: 63.39,
+                sunday: 81.50,
+                publicHoliday: 99.61,
+                afternoon: 49.80,
+                night: 50.71,
+                sleepover: 143.35
+            },
+            "E": {
+                code: "E",
+                classification: "Level 2 - pay point 2",
+                weekday: 46.70,
+                saturday: 65.38,
+                sunday: 84.06,
+                publicHoliday: 102.74,
+                afternoon: 51.37,
+                night: 52.30,
+                sleepover: 148.01
+            }
+        };
+
+        // Built-in Public Holidays from the project's .ics files (works offline & with server .ics files)
+        const BUILTIN_STATE_HOLIDAYS = {
+            VIC: [
+                "2024-01-01","2024-01-26","2024-03-11","2024-03-29","2024-03-30","2024-03-31","2024-04-01","2024-04-25","2024-06-10","2024-09-27","2024-11-05","2024-12-25","2024-12-26",
+                "2025-01-01","2025-01-26","2025-01-27","2025-03-10","2025-04-18","2025-04-19","2025-04-20","2025-04-21","2025-04-25","2025-06-09","2025-09-26","2025-11-04","2025-12-25","2025-12-26",
+                "2026-01-01","2026-01-26","2026-03-09","2026-04-03","2026-04-04","2026-04-05","2026-04-06","2026-04-25","2026-06-08","2026-09-25","2026-11-03","2026-12-25","2026-12-26","2026-12-28",
+                "2027-01-01","2027-01-26","2027-03-08","2027-03-26","2027-03-27","2027-03-28","2027-03-29","2027-04-25","2027-06-14","2027-09-24","2027-11-02","2027-12-25","2027-12-26","2027-12-27","2027-12-28",
+                "2028-01-01","2028-01-03","2028-01-26","2028-03-13","2028-04-14","2028-04-15","2028-04-16","2028-04-17","2028-04-25","2028-06-12","2028-09-29","2028-09-30","2028-11-07","2028-12-25","2028-12-26"
+            ],
+            NSW: [
+                "2025-01-01","2025-01-27","2025-04-18","2025-04-19","2025-04-20","2025-04-21","2025-04-25","2025-06-09","2025-08-04","2025-10-06","2025-12-25","2025-12-26",
+                "2026-01-01","2026-01-26","2026-04-03","2026-04-04","2026-04-05","2026-04-06","2026-04-25","2026-06-08","2026-08-03","2026-10-05","2026-12-25","2026-12-28",
+                "2027-01-01","2027-01-26","2027-03-26","2027-03-27","2027-03-28","2027-03-29","2027-04-25","2027-04-26","2027-06-14","2027-10-04","2027-12-25","2027-12-26","2027-12-27","2027-12-28"
+            ],
+            QLD: [
+                "2025-01-01","2025-01-27","2025-04-18","2025-04-19","2025-04-20","2025-04-21","2025-04-25","2025-05-05","2025-08-13","2025-10-06","2025-12-24","2025-12-25","2025-12-26",
+                "2026-01-01","2026-01-26","2026-04-03","2026-04-04","2026-04-05","2026-04-06","2026-04-25","2026-05-04","2026-08-12","2026-10-05","2026-12-24","2026-12-25","2026-12-28",
+                "2027-01-01","2027-01-26","2027-03-26","2027-03-27","2027-03-28","2027-03-29","2027-04-25","2027-04-26","2027-05-03","2027-10-04","2027-12-25","2027-12-26","2027-12-27","2027-12-28"
+            ],
+            WA: [
+                "2025-01-01","2025-01-27","2025-03-03","2025-04-18","2025-04-20","2025-04-21","2025-04-25","2025-06-02","2025-09-29","2025-12-25","2025-12-26",
+                "2026-01-01","2026-01-26","2026-03-02","2026-04-03","2026-04-05","2026-04-06","2026-04-27","2026-06-01","2026-09-28","2026-12-25","2026-12-28",
+                "2027-01-01","2027-01-26","2027-03-01","2027-03-26","2027-03-28","2027-03-29","2027-04-25","2027-04-26","2027-06-07","2027-09-27","2027-12-25","2027-12-26","2027-12-27","2027-12-28"
+            ],
+            SA: [
+                "2025-01-01","2025-01-27","2025-03-10","2025-04-18","2025-04-19","2025-04-20","2025-04-21","2025-04-25","2025-06-09","2025-10-06","2025-12-24","2025-12-25","2025-12-26","2025-12-31",
+                "2026-01-01","2026-01-26","2026-03-09","2026-04-03","2026-04-04","2026-04-05","2026-04-06","2026-04-25","2026-06-08","2026-10-05","2026-12-24","2026-12-25","2026-12-28","2026-12-31",
+                "2027-01-01","2027-01-26","2027-03-08","2027-03-26","2027-03-27","2027-03-28","2027-03-29","2027-04-25","2027-04-26","2027-06-14","2027-10-04","2027-12-25","2027-12-26","2027-12-27","2027-12-28"
+            ],
+            TAS: [
+                "2025-01-01","2025-01-08","2025-01-27","2025-02-10","2025-02-26","2025-03-04","2025-03-10","2025-04-21","2025-04-22","2025-04-25","2025-04-29","2025-05-02","2025-06-09","2025-10-03","2025-10-09","2025-10-17","2025-10-23","2025-11-03","2025-11-28","2025-12-25","2025-12-26",
+                "2026-01-01","2026-01-07","2026-01-26","2026-02-09","2026-02-25","2026-03-03","2026-03-09","2026-04-03","2026-04-06","2026-04-07","2026-04-25","2026-05-08","2026-06-08","2026-10-02","2026-10-08","2026-10-16","2026-10-22","2026-11-02","2026-11-27","2026-12-25","2026-12-28",
+                "2027-01-01","2027-01-26","2027-03-08","2027-03-26","2027-03-29","2027-04-25","2027-06-14","2027-12-25","2027-12-26","2027-12-27","2027-12-28"
+            ],
+            ACT: [
+                "2025-01-01","2025-01-27","2025-03-10","2025-04-18","2025-04-19","2025-04-20","2025-04-21","2025-04-25","2025-06-02","2025-06-09","2025-10-06","2025-12-25","2025-12-26",
+                "2026-01-01","2026-01-26","2026-03-09","2026-04-03","2026-04-04","2026-04-05","2026-04-06","2026-04-27","2026-06-01","2026-06-08","2026-10-05","2026-12-25","2026-12-28",
+                "2027-01-01","2027-01-26","2027-03-08","2027-03-26","2027-03-27","2027-03-28","2027-03-29","2027-04-25","2027-04-26","2027-05-31","2027-06-14","2027-10-04","2027-12-25","2027-12-26","2027-12-27","2027-12-28"
+            ],
+            NT: [
+                "2025-01-01","2025-01-27","2025-04-18","2025-04-19","2025-04-20","2025-04-21","2025-04-25","2025-05-05","2025-06-09","2025-07-04","2025-07-11","2025-07-18","2025-07-25","2025-08-04","2025-12-24","2025-12-25","2025-12-26","2025-12-31",
+                "2026-01-01","2026-01-26","2026-04-03","2026-04-04","2026-04-05","2026-04-06","2026-04-25","2026-05-04","2026-06-08","2026-07-03","2026-07-10","2026-07-17","2026-07-24","2026-08-03","2026-08-14","2026-12-24","2026-12-25","2026-12-28","2026-12-31",
+                "2027-01-01","2027-01-26","2027-03-26","2027-03-27","2027-03-28","2027-03-29","2027-04-25","2027-04-26","2027-05-03","2027-06-14","2027-08-02","2027-12-25","2027-12-26","2027-12-27","2027-12-28"
+            ]
+        };
+
+        // ============================================================================
+        // 2. APPLICATION STATE & UTILITY FUNCTIONS
+        // ============================================================================
+        const appState = {
+            selectedState: 'VIC',
+            remoteness: 'National',
+            selectedPayPoint: 'A',
+            includePublicHolidays: true,
+            importedHolidays: [...BUILTIN_STATE_HOLIDAYS['VIC']],
+            customHolidays: [],
+            allServiceInstances: [],
+            otherCosts: [],
+            nextOtherCostId: 1,
+            midnightsCrossed: 0,
+            totalStayHours: 0,
+            totalActiveSupportHours: 0,
+            totalSleepovers: 0,
+            totalNdisRevenue: 0,
+            totalSwWageCost: 0,
+            totalOtherCosts: 0,
+            calendarDate: new Date(),
+            selectedDateStr: null
+        };
+
+        function getSwUnitRate(payPointKey, categoryKey) {
+            const payPoint = SW_PAY_POINTS[payPointKey] || SW_PAY_POINTS['A'];
+            const itemInfo = STA_CATALOG[categoryKey];
+            if (!payPoint || !itemInfo || !itemInfo.swRateKey) return 0;
+            return payPoint[itemInfo.swRateKey] || 0;
+        }
+
+        function formatNumber(value, isCurrency = false, decimalPlaces = 2) {
+            if (value === null || typeof value === 'undefined' || isNaN(Number(value))) {
+                return isCurrency ? "$0.00" : "0.00";
+            }
+            const num = Number(value);
+            let formattedNum = num.toFixed(decimalPlaces);
+            const parts = formattedNum.split('.');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            formattedNum = parts.join('.');
+            return isCurrency ? `$${formattedNum}` : formattedNum;
+        }
+
+        function calcFormatDate(dateObj) {
+            if (!dateObj || !(dateObj instanceof Date) || isNaN(dateObj)) return null;
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function calcFormatDisplayDate(dateString) {
+            if (!dateString || !dateString.includes('-')) return "Invalid Date";
+            const parts = dateString.split('-');
+            if (parts.length !== 3) return "Invalid Date";
+            const [year, month, day] = parts;
+            return `${day}/${month}/${year}`;
+        }
+
+        function calcGetDayOfWeekString(dateObj) {
+            const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+            return days[dateObj.getDay()];
+        }
+
+        function formatHHMM(dateObj) {
+            return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function calcShowMessage(message) {
+            const overlay = document.getElementById('calcMessageBoxOverlay');
+            const text = document.getElementById('calcMessageBoxText');
+            if (text && overlay) {
+                text.textContent = message;
+                overlay.style.display = 'flex';
+            }
+        }
+
+        function parseICS(icsData) {
+            const dates = new Set();
+            const lines = icsData.split(/\r?\n/);
+            let inEvent = false;
+            for (const line of lines) {
+                if (line.startsWith('BEGIN:VEVENT')) {
+                    inEvent = true;
+                } else if (line.startsWith('END:VEVENT')) {
+                    inEvent = false;
+                } else if (inEvent && line.startsWith('DTSTART')) {
+                    const match = line.match(/^DTSTART(?:;.*?)?:(\d{4})(\d{2})(\d{2})/);
+                    if (match) {
+                        const [, year, month, day] = match;
+                        dates.add(`${year}-${month}-${day}`);
+                    }
+                }
+            }
+            return Array.from(dates);
+        }
+
+        function calcIsPublicHoliday(dateObj) {
+            const dateStr = calcFormatDate(dateObj);
+            return appState.importedHolidays && appState.importedHolidays.includes(dateStr);
+        }
+
+        // ============================================================================
+        // 3. UI TEMPLATE BUILDER (STA-ONLY STREAMLINED VIEW)
+        // ============================================================================
+        function buildCalculatorHTML(placeholder) {
+            placeholder.innerHTML = `
+                <!-- Header Banner -->
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 gap-4">
+                    <div>
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-bold uppercase tracking-wider mb-2">
+                            <i class="fas fa-moon"></i> Short Term Accommodation (STA)
+                        </div>
+                        <h1 class="text-2xl md:text-3xl font-bold text-gray-800 tracking-tight">STA Calculator</h1>
+                        <p class="text-sm text-gray-500 font-medium mt-1">
+                            06:00–22:00 Hourly Standard Rate &bull; 22:00–06:00 Sleepover (No Night Rate) &bull; Every 00:00 Crossed = 1 Day Participant &amp; Worker Accommodation
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Top Grid: Booking Details (Left) & Duration Calendar (Right) -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <!-- Left Column: Main STA Input Card -->
+                    <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between border-b border-gray-100 pb-4 mb-5">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="p-2 bg-teal-50 rounded-xl text-teal-600"><i class="fas fa-calendar-check text-xl"></i></div>
+                                    <h2 class="text-lg font-bold text-gray-800">Booking Details</h2>
+                                </div>
+                                <span id="validationBadge" class="text-xs font-semibold px-3 py-1 rounded-full bg-teal-50 text-teal-700">
+                                    Auto-calculating
+                                </span>
+                            </div>
+
+                            <!-- Start & End Date/Time Stack -->
+                            <div class="space-y-4 mb-5">
+                                <!-- Start Date & Time -->
+                                <div class="p-4 rounded-xl bg-gray-50 border border-gray-200/80">
+                                    <div class="flex items-center gap-2 mb-2.5">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
+                                        <span class="text-xs font-bold text-gray-600 uppercase tracking-wider">Start Date &amp; Time</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label for="staStartDate" class="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
+                                            <input type="date" id="staStartDate" class="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-gray-800 text-sm font-medium">
+                                        </div>
+                                        <div>
+                                            <label for="staStartTime" class="block text-xs font-medium text-gray-500 mb-1">Start Time</label>
+                                            <input type="time" id="staStartTime" class="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-gray-800 text-sm font-medium" step="900">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- End Date & Time -->
+                                <div class="p-4 rounded-xl bg-gray-50 border border-gray-200/80">
+                                    <div class="flex items-center gap-2 mb-2.5">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                                        <span class="text-xs font-bold text-gray-600 uppercase tracking-wider">End Date &amp; Time</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label for="staEndDate" class="block text-xs font-medium text-gray-500 mb-1">End Date</label>
+                                            <input type="date" id="staEndDate" class="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-gray-800 text-sm font-medium">
+                                        </div>
+                                        <div>
+                                            <label for="staEndTime" class="block text-xs font-medium text-gray-500 mb-1">End Time</label>
+                                            <input type="time" id="staEndTime" class="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-gray-800 text-sm font-medium" step="900">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Remoteness & Public Holiday Stack -->
+                            <div class="space-y-4">
+                                <!-- Location / Remoteness -->
+                                <div>
+                                    <label for="remotenessSelect" class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                                        Location / Remoteness (MMM 1-7)
+                                    </label>
+                                    <div class="relative">
+                                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-teal-600"><i class="fas fa-map-marker-alt"></i></span>
+                                        <select id="remotenessSelect" class="w-full pl-10 p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 font-semibold text-sm appearance-none cursor-pointer">
+                                            <option value="National" selected>National (Standard MMM 1-5)</option>
+                                            <option value="Remote">Remote (MMM 6)</option>
+                                            <option value="Very Remote">Very Remote (MMM 7)</option>
+                                        </select>
+                                        <span class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-gray-400"><i class="fas fa-chevron-down"></i></span>
+                                    </div>
+                                </div>
+
+                                <!-- Support Worker Classification / Pay Point -->
+                                <div>
+                                    <label for="payPointSelect" class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                                        Support Worker Classification (Pay Point)
+                                    </label>
+                                    <div class="relative">
+                                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-amber-600"><i class="fas fa-user-nurse"></i></span>
+                                        <select id="payPointSelect" class="w-full pl-10 p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 font-semibold text-sm appearance-none cursor-pointer">
+                                            <option value="A" selected>A — Level 1 - pay point 1 ($34.44/hr base)</option>
+                                            <option value="B">B — Level 1 - pay point 2 ($35.55/hr base)</option>
+                                            <option value="C">C — Level 1 - pay point 3 ($36.81/hr base)</option>
+                                            <option value="C1">C1 — Level 1 - pay point 3.5 (10% raise) ($40.49/hr base)</option>
+                                            <option value="D">D — Level 2 - pay point 1 ($45.28/hr base)</option>
+                                            <option value="E">E — Level 2 - pay point 2 ($46.70/hr base)</option>
+                                        </select>
+                                        <span class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-gray-400"><i class="fas fa-chevron-down"></i></span>
+                                    </div>
+                                </div>
+
+                                <!-- Public Holidays & State Selection -->
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
+                                        Public Holidays &amp; State
+                                    </label>
+                                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+                                        <label for="includePublicHolidays" class="flex items-center px-2 py-1 cursor-pointer select-none">
+                                            <input type="checkbox" id="includePublicHolidays" class="w-4 h-4 text-teal-600 bg-white border-gray-300 rounded focus:ring-teal-500 cursor-pointer" checked>
+                                            <span class="ml-2.5 text-sm font-semibold text-gray-700">Include Public Holidays</span>
+                                        </label>
+                                        <div class="flex items-center gap-2">
+                                            <select id="stateSelect" class="p-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 cursor-pointer">
+                                                <option value="VIC" selected>Victoria (VIC)</option>
+                                                <option value="NSW">New South Wales (NSW)</option>
+                                                <option value="QLD">Queensland (QLD)</option>
+                                                <option value="WA">Western Australia (WA)</option>
+                                                <option value="SA">South Australia (SA)</option>
+                                                <option value="TAS">Tasmania (TAS)</option>
+                                                <option value="ACT">ACT</option>
+                                                <option value="NT">Northern Territory (NT)</option>
+                                            </select>
+                                            <button id="importIcsBtn" class="p-2 bg-white border border-gray-200 text-teal-600 rounded-lg text-xs font-bold hover:bg-teal-50 transition-colors shadow-sm" title="Import Custom .ics">
+                                                <i class="fas fa-file-import"></i>
+                                            </button>
+                                            <input type="file" id="icsFileInput" accept=".ics" class="hidden">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Other Costs Dynamic Section -->
+                                <div class="p-4 rounded-xl bg-gray-50 border border-gray-200/80">
+                                    <div class="flex justify-between items-center mb-3">
+                                        <div>
+                                            <label class="block text-xs font-bold text-gray-600 uppercase tracking-wider">Other Costs</label>
+                                            <p class="text-[11px] text-gray-400">Add custom expenses (e.g., accommodation, meals, activities)</p>
+                                        </div>
+                                        <button type="button" id="addOtherCostBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm transform hover:-translate-y-0.5" title="Add Other Cost">
+                                            <i class="fas fa-plus"></i>
+                                            <span>Add Cost</span>
+                                        </button>
+                                    </div>
+                                    <div id="otherCostsContainer" class="space-y-2.5"></div>
+                                    <div id="otherCostsEmptyHint" class="text-center py-2.5 text-xs text-gray-400 italic bg-white/60 rounded-lg border border-dashed border-gray-200">
+                                        Click "+" to add any additional costs for this STA booking.
+                                    </div>
+                                    <div class="mt-3 pt-2.5 border-t border-gray-200 flex justify-between items-center">
+                                        <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Other Costs</span>
+                                        <span id="totalOtherCostsDisplay" class="text-sm font-extrabold text-rose-600">$0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detected Public Holidays Notice -->
+                        <div id="detectedHolidaysBanner" class="hidden mt-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-xs font-medium flex items-center gap-2"></div>
+                    </div>
+
+                    <!-- Right Column: Duration & Interactive Calendar Card -->
+                    <div id="planDatesCard" class="p-6 border border-gray-100 rounded-2xl bg-white shadow-lg flex flex-col">
+                        <div class="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
+                            <div class="flex items-center gap-2.5">
+                                <div class="p-2 bg-indigo-50 rounded-xl text-indigo-600"><i class="fas fa-calendar-alt text-xl"></i></div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800">Duration &amp; Calendar</h3>
+                                    <p class="text-xs text-gray-400">Click any date to inspect its Day View below</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 text-xs font-medium text-gray-500">
+                                <span class="flex items-center gap-1.5"><span class="dot-indicator dot-service inline-block"></span>STA</span>
+                                <span class="flex items-center gap-1.5"><span class="dot-indicator dot-midnight inline-block"></span>00:00 Accom</span>
+                                <span class="flex items-center gap-1.5"><span class="dot-indicator dot-holiday inline-block"></span>PH</span>
+                            </div>
+                        </div>
+
+                        <div id="durationDisplay" class="text-center text-sm font-semibold text-indigo-600 bg-indigo-50 py-2.5 px-3 rounded-xl mb-4"></div>
+
+                        <!-- Calendar Preview Area -->
+                        <div class="flex-grow flex flex-col">
+                            <div id="calendarViewContainer" class="flex-grow rounded-xl overflow-hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Metrics Bar -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3.5 mb-6">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Total Elapsed Time</div>
+                        <div id="metricTotalElapsed" class="text-lg font-extrabold text-gray-800">0.00 hrs</div>
+                        <div id="metricTotalElapsedSub" class="text-[11px] text-gray-500 mt-1">-</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-[11px] font-bold text-teal-600 uppercase tracking-wider mb-1">Standard Hours</div>
+                        <div id="metricActiveHours" class="text-lg font-extrabold text-teal-600">0.00 hrs</div>
+                        <div class="text-[11px] text-gray-500 mt-1">06:00–22:00 Active</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Sleepovers &amp; 00:00</div>
+                        <div id="metricSleepovers" class="text-lg font-extrabold text-indigo-600">0 Nights</div>
+                        <div id="metricMidnights" class="text-[11px] text-pink-600 font-semibold mt-1">0 Midnights Crossed</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-1">Total NDIS Charge</div>
+                        <div id="metricNdisRevenue" class="text-lg font-extrabold text-teal-700">$0.00</div>
+                        <div class="text-[11px] text-gray-500 mt-1">STA Claimable Total</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-[11px] font-bold text-amber-600 uppercase tracking-wider mb-1">SW Wage Cost</div>
+                        <div id="metricSwWageCost" class="text-lg font-extrabold text-amber-600">$0.00</div>
+                        <div id="metricSwPayPointSub" class="text-[11px] text-gray-500 mt-1">Pay Point A</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="text-[11px] font-bold text-rose-600 uppercase tracking-wider mb-1">Other Costs</div>
+                        <div id="metricOtherCosts" class="text-lg font-extrabold text-rose-600">$0.00</div>
+                        <div id="metricOtherCostsSub" class="text-[11px] text-gray-500 mt-1">0 Custom Items</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 col-span-2 sm:col-span-2 lg:col-span-1">
+                        <div class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Net Margin</div>
+                        <div id="metricNetMargin" class="text-lg font-extrabold text-emerald-600">$0.00</div>
+                        <div id="metricNetMarginPct" class="text-[11px] text-gray-500 mt-1">0.0% Margin</div>
+                    </div>
+                </div>
+
+                <!-- Day View Card -->
+                <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-6">
+                    <div id="dailyServiceViewContainer"></div>
+                </div>
+
+                <!-- STA Cost & Support Worker Wage Summary Card -->
+                <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-6">
+                    <div class="p-6 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h2 class="text-lg font-bold text-gray-800">STA Revenue, Support Worker Wage &amp; Other Costs Summary</h2>
+                            <p class="text-xs text-gray-500">Grouped by NDIS Support Item with Support Worker Pay Point wages and custom Other Costs</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span id="summaryLocationBadge" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-800">
+                                National Rates
+                            </span>
+                            <span id="summaryPayPointBadge" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                SW: Level 1 - pay point 1 (A)
+                            </span>
+                        </div>
+                    </div>
+                    <div id="summaryBoxContainer" class="p-6 overflow-x-auto"></div>
+                    <div class="bg-gray-900 text-white p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-center">
+                        <div>
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-wider block">Total NDIS STA Charge</span>
+                            <span id="grandTotalCostCell" class="text-2xl font-extrabold tracking-tight text-teal-400">$0.00</span>
+                            <span class="text-[11px] text-gray-400 block mt-0.5">Includes Support, Sleepovers &amp; Accom</span>
+                        </div>
+                        <div>
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-wider block">Support Worker Wage Cost</span>
+                            <span id="grandTotalWageCell" class="text-2xl font-extrabold tracking-tight text-amber-400">$0.00</span>
+                            <span id="grandTotalWageSub" class="text-[11px] text-gray-400 block mt-0.5">Selected Classification: A</span>
+                        </div>
+                        <div>
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-wider block">Total Other Costs</span>
+                            <span id="grandTotalOtherCostCell" class="text-2xl font-extrabold tracking-tight text-rose-400">$0.00</span>
+                            <span id="grandTotalOtherCostSub" class="text-[11px] text-gray-400 block mt-0.5">0 Custom Cost Items</span>
+                        </div>
+                        <div class="lg:text-right">
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-wider block">Estimated Net Margin</span>
+                            <span id="grandTotalMarginCell" class="text-2xl font-extrabold tracking-tight text-emerald-400">$0.00</span>
+                            <span id="grandTotalMarginSub" class="text-[11px] text-gray-400 block mt-0.5">NDIS Charge minus SW Wage &amp; Other Costs</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- All Pay Points Wage & Margin Comparison Card -->
+                <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-6">
+                    <div class="p-6 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h2 class="text-lg font-bold text-gray-800">Support Worker Wage Comparison Across All Pay Points (A – E)</h2>
+                            <p class="text-xs text-gray-500">Click any row to switch the active Support Worker classification</p>
+                        </div>
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700">
+                            Auto-compared for this booking
+                        </span>
+                    </div>
+                    <div id="payPointComparisonContainer" class="p-6 overflow-x-auto"></div>
+                </div>
+
+                <!-- Detailed Segment Breakdown Log -->
+                <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                        <div>
+                            <h2 class="text-lg font-bold text-gray-800">Chronological Breakdown</h2>
+                            <p class="text-xs text-gray-500">Step-by-step calculation of each time window and 00:00 midnight crossing</p>
+                        </div>
+                        <span id="logCountBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-gray-200 text-gray-700">0 Items</span>
+                    </div>
+                    <div id="serviceLogContainer" class="p-6 overflow-x-auto"></div>
+                </div>
+            `;
+        }
+
+        // ============================================================================
+        // 4. CORE STA CALCULATION ENGINE
+        // ============================================================================
+        function syncOtherCostsFromDOM() {
+            const rows = document.querySelectorAll('.other-cost-row');
+            const list = [];
+            let sum = 0;
+            rows.forEach(row => {
+                const id = row.dataset.costId;
+                const descInput = row.querySelector('.other-cost-desc');
+                const amountInput = row.querySelector('.other-cost-amount');
+                const description = descInput ? descInput.value.trim() : '';
+                const rawAmount = amountInput ? parseFloat(amountInput.value) : 0;
+                const amount = isNaN(rawAmount) || rawAmount < 0 ? 0 : rawAmount;
+                sum += amount;
+                list.push({
+                    id: id,
+                    description: description || 'Other Cost Item',
+                    rawDescription: description,
+                    amount: amount
+                });
+            });
+            appState.otherCosts = list;
+            appState.totalOtherCosts = sum;
+
+            const totalDisplay = document.getElementById('totalOtherCostsDisplay');
+            if (totalDisplay) {
+                totalDisplay.textContent = formatNumber(sum, true);
+            }
+            const emptyHint = document.getElementById('otherCostsEmptyHint');
+            if (emptyHint) {
+                emptyHint.classList.toggle('hidden', rows.length > 0);
+            }
+        }
+
+        function addOtherCostRow(defaultDesc = '', defaultAmount = '') {
+            const container = document.getElementById('otherCostsContainer');
+            if (!container) return;
+
+            const costId = `other_cost_${appState.nextOtherCostId++}`;
+            const row = document.createElement('div');
+            row.className = 'other-cost-row flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-200 shadow-sm';
+            row.dataset.costId = costId;
+            row.innerHTML = `
+                <div class="flex-grow">
+                    <input type="text" class="other-cost-desc w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400" placeholder="What is this cost? (e.g., Hotel, Meals, Tickets)" value="${defaultDesc}">
+                </div>
+                <div class="relative w-32 sm:w-36 flex-shrink-0">
+                    <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-gray-400 text-xs font-bold pointer-events-none">$</span>
+                    <input type="number" step="0.01" min="0" class="other-cost-amount w-full pl-6 pr-2 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 text-right placeholder-gray-400" placeholder="0.00" value="${defaultAmount}">
+                </div>
+                <button type="button" class="remove-other-cost-btn p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0" title="Remove Cost Item">
+                    <i class="fas fa-trash-alt text-xs"></i>
+                </button>
+            `;
+
+            const descInput = row.querySelector('.other-cost-desc');
+            const amountInput = row.querySelector('.other-cost-amount');
+            const removeBtn = row.querySelector('.remove-other-cost-btn');
+
+            descInput.addEventListener('input', () => {
+                renderAll();
+            });
+            amountInput.addEventListener('input', () => {
+                renderAll();
+            });
+            removeBtn.addEventListener('click', () => {
+                row.remove();
+                renderAll();
+            });
+
+            container.appendChild(row);
+            renderAll();
+            descInput.focus();
+        }
+
+        function calculateStaBreakdown() {
+            syncOtherCostsFromDOM();
+            appState.allServiceInstances = [];
+            appState.midnightsCrossed = 0;
+            appState.totalStayHours = 0;
+            appState.totalActiveSupportHours = 0;
+            appState.totalSleepovers = 0;
+            appState.totalNdisRevenue = 0;
+            appState.totalSwWageCost = 0;
+
+            const startDateStr = document.getElementById('staStartDate').value;
+            const startTimeStr = document.getElementById('staStartTime').value;
+            const endDateStr = document.getElementById('staEndDate').value;
+            const endTimeStr = document.getElementById('staEndTime').value;
+            const remoteness = document.getElementById('remotenessSelect').value || 'National';
+            const payPointEl = document.getElementById('payPointSelect');
+            const selectedPayPoint = payPointEl ? payPointEl.value : 'A';
+            const includePH = document.getElementById('includePublicHolidays').checked;
+
+            appState.remoteness = remoteness;
+            appState.selectedPayPoint = selectedPayPoint;
+            appState.includePublicHolidays = includePH;
+
+            const badgeEl = document.getElementById('validationBadge');
+            if (!startDateStr || !startTimeStr || !endDateStr || !endTimeStr) {
+                if (badgeEl) {
+                    badgeEl.textContent = "Please complete Start & End Date/Time";
+                    badgeEl.className = "text-xs font-semibold px-3 py-1 rounded-full bg-amber-100 text-amber-800";
+                }
+                return;
+            }
+
+            const bookingStart = new Date(`${startDateStr}T${startTimeStr}:00`);
+            const bookingEnd = new Date(`${endDateStr}T${endTimeStr}:00`);
+
+            if (isNaN(bookingStart) || isNaN(bookingEnd) || bookingEnd <= bookingStart) {
+                if (badgeEl) {
+                    badgeEl.textContent = "End Date & Time must be after Start Date & Time";
+                    badgeEl.className = "text-xs font-semibold px-3 py-1 rounded-full bg-red-100 text-red-700";
+                }
+                return;
+            }
+
+            if (badgeEl) {
+                badgeEl.textContent = "Valid Range • Calculated";
+                badgeEl.className = "text-xs font-semibold px-3 py-1 rounded-full bg-teal-50 text-teal-700";
+            }
+
+            appState.totalStayHours = (bookingEnd.getTime() - bookingStart.getTime()) / 3600000;
+
+            // Helper to push an instance with both NDIS revenue and Support Worker wage cost
+            const pushInstance = (dateObj, categoryKey, detailsText, qty, sortTimeMs, segStartObj = null, segEndObj = null) => {
+                const itemInfo = STA_CATALOG[categoryKey];
+                const unitRate = itemInfo[remoteness];
+                const cost = qty * unitRate;
+
+                const swUnitRate = getSwUnitRate(selectedPayPoint, categoryKey);
+                const swCost = itemInfo.swRateKey ? (qty * swUnitRate) : 0;
+                const netMargin = cost - swCost;
+
+                appState.totalNdisRevenue += cost;
+                appState.totalSwWageCost += swCost;
+
+                appState.allServiceInstances.push({
+                    instanceId: `sta_${appState.allServiceInstances.length + 1}`,
+                    date: new Date(dateObj),
+                    dateStr: calcFormatDate(dateObj),
+                    dayName: calcGetDayOfWeekString(dateObj),
+                    isPH: includePH && calcIsPublicHoliday(dateObj),
+                    categoryKey: categoryKey,
+                    supportItemNumber: itemInfo.code,
+                    supportItemName: itemInfo.name,
+                    shortName: itemInfo.shortName,
+                    unit: itemInfo.unit,
+                    details: detailsText,
+                    qty: qty,
+                    unitRate: unitRate,
+                    cost: cost,
+                    swRateKey: itemInfo.swRateKey,
+                    swRateLabel: itemInfo.swRateLabel,
+                    swUnitRate: swUnitRate,
+                    swCost: swCost,
+                    netMargin: netMargin,
+                    badgeClass: itemInfo.badgeClass,
+                    blockColor: itemInfo.blockColor,
+                    sortTimeMs: sortTimeMs,
+                    segStart: segStartObj ? new Date(segStartObj) : null,
+                    segEnd: segEndObj ? new Date(segEndObj) : null
+                });
+            };
+
+            let cursorDay = new Date(`${startDateStr}T00:00:00`);
+
+            // Case A: If booking starts between 00:00 and 06:00 on the first day,
+            // that early morning period (00:00 - 06:00) ALWAYS uses Sleepover (NO Night Rate).
+            const firstMorningSix = new Date(cursorDay);
+            firstMorningSix.setHours(6, 0, 0, 0);
+            if (bookingStart < firstMorningSix) {
+                const earlyStart = bookingStart;
+                const earlyEnd = bookingEnd < firstMorningSix ? bookingEnd : firstMorningSix;
+                if (earlyEnd > earlyStart) {
+                    appState.totalSleepovers += 1;
+                    pushInstance(
+                        cursorDay,
+                        "Sleepover",
+                        `${formatHHMM(earlyStart)} - ${formatHHMM(earlyEnd)} (Sleepover Window)`,
+                        1,
+                        earlyStart.getTime(),
+                        earlyStart,
+                        earlyEnd
+                    );
+                }
+            }
+
+            // Iterate day by day across the booking period
+            while (cursorDay <= bookingEnd) {
+                const dayDate = new Date(cursorDay);
+                const dayIndex = dayDate.getDay();
+                const isPH = includePH && calcIsPublicHoliday(dayDate);
+
+                // 1. Daytime & Evening Hourly Windows (06:00 to 22:00 only)
+                let hourlyWindows = [];
+                if (isPH) {
+                    hourlyWindows = [{ startH: 6, endH: 22, categoryKey: "Public Holiday" }];
+                } else if (dayIndex === 6) {
+                    hourlyWindows = [{ startH: 6, endH: 22, categoryKey: "Saturday" }];
+                } else if (dayIndex === 0) {
+                    hourlyWindows = [{ startH: 6, endH: 22, categoryKey: "Sunday" }];
+                } else {
+                    hourlyWindows = [
+                        { startH: 6, endH: 20, categoryKey: "Weekday Daytime" },
+                        { startH: 20, endH: 22, categoryKey: "Weekday Evening" }
+                    ];
+                }
+
+                hourlyWindows.forEach(win => {
+                    const winStart = new Date(dayDate);
+                    winStart.setHours(win.startH, 0, 0, 0);
+                    const winEnd = new Date(dayDate);
+                    winEnd.setHours(win.endH, 0, 0, 0);
+
+                    const segStart = bookingStart > winStart ? bookingStart : winStart;
+                    const segEnd = bookingEnd < winEnd ? bookingEnd : winEnd;
+
+                    if (segEnd > segStart) {
+                        const hours = (segEnd.getTime() - segStart.getTime()) / 3600000;
+                        appState.totalActiveSupportHours += hours;
+                        pushInstance(
+                            dayDate,
+                            win.categoryKey,
+                            `${formatHHMM(segStart)} - ${formatHHMM(segEnd)} (${hours.toFixed(2)} hrs)`,
+                            hours,
+                            segStart.getTime(),
+                            segStart,
+                            segEnd
+                        );
+                    }
+                });
+
+                // 2. Sleepover Window: 22:00 on dayDate to 06:00 on next day (ALWAYS Sleepover, NO Night Rate)
+                const sleepWinStart = new Date(dayDate);
+                sleepWinStart.setHours(22, 0, 0, 0);
+                const sleepWinEnd = new Date(dayDate);
+                sleepWinEnd.setDate(sleepWinEnd.getDate() + 1);
+                sleepWinEnd.setHours(6, 0, 0, 0);
+
+                const actualSleepStart = bookingStart > sleepWinStart ? bookingStart : sleepWinStart;
+                const actualSleepEnd = bookingEnd < sleepWinEnd ? bookingEnd : sleepWinEnd;
+
+                if (actualSleepEnd > actualSleepStart) {
+                    appState.totalSleepovers += 1;
+                    pushInstance(
+                        dayDate,
+                        "Sleepover",
+                        `${formatHHMM(actualSleepStart)} - ${formatHHMM(actualSleepEnd)} (22:00–06:00 Sleepover)`,
+                        1,
+                        actualSleepStart.getTime(),
+                        actualSleepStart,
+                        actualSleepEnd
+                    );
+                }
+
+                // 3. Midnight (00:00) Crossing Check:
+                // Every 00:00 crossed between bookingStart and bookingEnd adds:
+                // - 1 Day Participant Accommodation
+                // - 1 Day Support Worker Accommodation
+                const midnightPoint = new Date(dayDate);
+                midnightPoint.setDate(midnightPoint.getDate() + 1);
+                midnightPoint.setHours(0, 0, 0, 0);
+
+                if (midnightPoint > bookingStart && midnightPoint <= bookingEnd) {
+                    appState.midnightsCrossed += 1;
+                    const crossingLabel = `00:00 Midnight Crossed (#${appState.midnightsCrossed}: ${calcFormatDisplayDate(calcFormatDate(dayDate))} → ${calcFormatDisplayDate(calcFormatDate(midnightPoint))})`;
+
+                    pushInstance(
+                        dayDate,
+                        "Participant Accommodation",
+                        crossingLabel,
+                        1,
+                        midnightPoint.getTime() - 2
+                    );
+                    pushInstance(
+                        dayDate,
+                        "Support Worker Accommodation",
+                        crossingLabel,
+                        1,
+                        midnightPoint.getTime() - 1
+                    );
+                }
+
+                cursorDay.setDate(cursorDay.getDate() + 1);
+            }
+
+            // Sort chronologically
+            appState.allServiceInstances.sort((a, b) => a.sortTimeMs - b.sortTimeMs);
+        }
+
+        // ============================================================================
+        // 5. RENDERING FUNCTIONS
+        // ============================================================================
+        function renderAll() {
+            calculateStaBreakdown();
+            updateDurationDisplay();
+            renderDetectedHolidaysBanner();
+            renderMetrics();
+            renderCalendar();
+            renderDailyServices();
+            renderSummaryTable();
+            renderPayPointComparisonTable();
+            renderChronologicalLog();
+        }
+
+        function updateDurationDisplay() {
+            const startDateStr = document.getElementById('staStartDate').value;
+            const endDateStr = document.getElementById('staEndDate').value;
+            const startTimeStr = document.getElementById('staStartTime').value;
+            const endTimeStr = document.getElementById('staEndTime').value;
+            const displayEl = document.getElementById('durationDisplay');
+            if (!displayEl) return;
+
+            if (startDateStr && endDateStr) {
+                const startDate = new Date(`${startDateStr}T00:00:00`);
+                const endDate = new Date(`${endDateStr}T00:00:00`);
+                if (endDate >= startDate) {
+                    const diffTime = Math.abs(endDate - startDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                    const weeks = Math.floor(diffDays / 7);
+                    const days = diffDays % 7;
+                    displayEl.innerHTML = `
+                        <span>Duration: ${weeks} weeks, ${days} day(s) (Total ${diffDays} calendar days)</span>
+                        <span class="mx-2 text-indigo-300">|</span>
+                        <span class="text-teal-700 font-bold">${appState.midnightsCrossed} Midnight(s) Crossed (${appState.totalStayHours.toFixed(2)} hrs)</span>
+                    `;
+                } else {
+                    displayEl.textContent = 'Invalid Date Range';
+                }
+            } else {
+                displayEl.textContent = '';
+            }
+        }
+
+        function getInstancesTouchingDate(targetDateStr) {
+            if (!targetDateStr) return [];
+            const dayStart = new Date(`${targetDateStr}T00:00:00`);
+            const dayEnd = new Date(`${targetDateStr}T23:59:59.999`);
+            const nextMidnight = new Date(dayStart);
+            nextMidnight.setDate(nextMidnight.getDate() + 1);
+
+            const results = [];
+            appState.allServiceInstances.forEach(inst => {
+                if (inst.segStart && inst.segEnd) {
+                    // Timed segment (Standard or Sleepover) overlaps with this calendar day
+                    if (inst.segStart < nextMidnight && inst.segEnd > dayStart) {
+                        results.push(inst);
+                    }
+                } else if (inst.dateStr === targetDateStr) {
+                    // Accommodation items recorded on this day's midnight crossing
+                    results.push(inst);
+                }
+            });
+            return results;
+        }
+
+        function renderCalendar() {
+            const container = document.getElementById('calendarViewContainer');
+            if (!container) return;
+
+            const month = appState.calendarDate.getMonth();
+            const year = appState.calendarDate.getFullYear();
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            const startDayIndex = (firstDay.getDay() + 6) % 7; // Monday = 0
+
+            const planStartStr = document.getElementById('staStartDate').value;
+            const planEndStr = document.getElementById('staEndDate').value;
+
+            let calendarHtml = `
+                <div class="calendar-container h-full flex flex-col">
+                    <div class="calendar-header flex justify-between items-center">
+                        <button id="prevMonthBtn" type="button" class="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors">&lt;</button>
+                        <h4 class="font-bold text-gray-700">${firstDay.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</h4>
+                        <button id="nextMonthBtn" type="button" class="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors">&gt;</button>
+                    </div>
+                    <div class="calendar-grid flex-grow">
+                        ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `<div class="calendar-day-name">${d}</div>`).join('')}
+            `;
+
+            for (let i = 0; i < startDayIndex; i++) {
+                calendarHtml += `<div class="bg-gray-50"></div>`;
+            }
+
+            const todayStr = calcFormatDate(new Date());
+
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dayObj = new Date(year, month, i);
+                const dayStr = calcFormatDate(dayObj);
+                let classes = 'calendar-day group';
+
+                const isInRange = planStartStr && planEndStr && dayStr >= planStartStr && dayStr <= planEndStr;
+                if (!isInRange) {
+                    classes += ' disabled opacity-45 bg-gray-50';
+                } else {
+                    classes += ' in-range';
+                }
+                if (dayStr === todayStr) classes += ' today';
+                if (dayStr === appState.selectedDateStr) classes += ' selected';
+
+                const dayInstances = getInstancesTouchingDate(dayStr);
+                const hasTimedServices = dayInstances.some(inst => inst.segStart && inst.segEnd);
+                const hasMidnightAccom = dayInstances.some(inst => !inst.segStart);
+                const isHoliday = appState.includePublicHolidays && calcIsPublicHoliday(dayObj);
+
+                calendarHtml += `
+                    <div class="${classes}" data-date="${dayStr}">
+                        <span class="day-number flex items-center justify-center rounded-full absolute top-1.5 left-1.5 font-semibold text-xs text-gray-600 group-hover:bg-teal-100 group-hover:text-teal-700 px-1.5 py-0.5 transition-colors">${i}</span>
+                `;
+
+                if (hasTimedServices || hasMidnightAccom || isHoliday) {
+                    calendarHtml += `<div class="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1">`;
+                    if (hasTimedServices) calendarHtml += `<div class="dot-indicator dot-service" title="STA Support / Sleepover"></div>`;
+                    if (hasMidnightAccom) calendarHtml += `<div class="dot-indicator dot-midnight" title="00:00 Midnight Accommodation"></div>`;
+                    if (isHoliday) calendarHtml += `<div class="dot-indicator dot-holiday" title="Public Holiday"></div>`;
+                    calendarHtml += `</div>`;
+                }
+
+                calendarHtml += `</div>`;
+            }
+
+            calendarHtml += `</div></div>`;
+            container.innerHTML = calendarHtml;
+        }
+
+        function renderDailyServices() {
+            const container = document.getElementById('dailyServiceViewContainer');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (!appState.selectedDateStr) {
+                container.innerHTML = `<div class="text-center py-6 text-gray-400 italic">Click a date on the calendar to inspect its Day View.</div>`;
+                return;
+            }
+
+            const selectedDayObj = new Date(`${appState.selectedDateStr}T00:00:00`);
+            const nextDayObj = new Date(selectedDayObj);
+            nextDayObj.setDate(nextDayObj.getDate() + 1);
+
+            const isSelectedPH = appState.includePublicHolidays && calcIsPublicHoliday(selectedDayObj);
+            const dayName = calcGetDayOfWeekString(selectedDayObj);
+
+            // Find all visual time blocks overlapping [selectedDayObj 00:00, nextDayObj 00:00]
+            const visualSlices = [];
+            const dailyTableRows = [];
+
+            appState.allServiceInstances.forEach(inst => {
+                if (inst.segStart && inst.segEnd) {
+                    const clipStart = inst.segStart > selectedDayObj ? inst.segStart : selectedDayObj;
+                    const clipEnd = inst.segEnd < nextDayObj ? inst.segEnd : nextDayObj;
+
+                    if (clipEnd > clipStart) {
+                        const startMin = (clipStart.getTime() - selectedDayObj.getTime()) / 60000;
+                        const endMin = (clipEnd.getTime() - selectedDayObj.getTime()) / 60000;
+                        const sliceHours = (endMin - startMin) / 60;
+
+                        visualSlices.push({
+                            instance: inst,
+                            startMin: startMin,
+                            endMin: endMin,
+                            sliceLabel: `${formatHHMM(clipStart)}-${endMin === 1440 ? '24:00' : formatHHMM(clipEnd)}`
+                        });
+
+                        // Include in the Daily Breakdown table if the instance belongs to this day or is an overnight sleepover portion
+                        const isOvernightContinuation = inst.dateStr !== appState.selectedDateStr;
+                        dailyTableRows.push({
+                            instance: inst,
+                            timeDisplay: isOvernightContinuation
+                                ? `${formatHHMM(clipStart)} - ${formatHHMM(clipEnd)} (Sleepover cont. from ${calcFormatDisplayDate(inst.dateStr)})`
+                                : inst.details,
+                            qtyDisplay: isOvernightContinuation
+                                ? `Included in ${calcFormatDisplayDate(inst.dateStr)} Sleepover`
+                                : (inst.unit === 'Hour' ? `${inst.qty.toFixed(2)} hrs` : `1 ${inst.unit}`),
+                            costDisplay: isOvernightContinuation ? 0 : inst.cost,
+                            swCostDisplay: isOvernightContinuation ? 0 : inst.swCost,
+                            isContinuation: isOvernightContinuation,
+                            sortKey: startMin
+                        });
+                    }
+                } else if (inst.dateStr === appState.selectedDateStr) {
+                    // 00:00 Midnight Accommodation items triggered at the end of selectedDateStr
+                    dailyTableRows.push({
+                        instance: inst,
+                        timeDisplay: inst.details,
+                        qtyDisplay: `${inst.qty} ${inst.unit}`,
+                        costDisplay: inst.cost,
+                        swCostDisplay: inst.swCost,
+                        isContinuation: false,
+                        sortKey: 1440
+                    });
+                }
+            });
+
+            dailyTableRows.sort((a, b) => a.sortKey - b.sortKey);
+
+            let html = `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-teal-50 text-teal-600 rounded-xl"><i class="fas fa-clock text-lg"></i></div>
+                        <div>
+                            <h4 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                <span class="text-gray-400 font-normal">Day View:</span>
+                                <span>${calcFormatDisplayDate(appState.selectedDateStr)} (${dayName})</span>
+                                ${isSelectedPH ? `<span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">Public Holiday</span>` : ''}
+                            </h4>
+                            <p class="text-xs text-gray-400">24-Hour Visual Schedule &amp; Daily STA Breakdown</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="prevDayBtn" class="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
+                            <i class="fas fa-chevron-left mr-1"></i>Prev Day
+                        </button>
+                        <button type="button" id="nextDayBtn" class="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
+                            Next Day<i class="fas fa-chevron-right ml-1"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            if (visualSlices.length === 0 && dailyTableRows.length === 0) {
+                html += `
+                    <div class="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                        <div class="text-gray-400 mb-2"><i class="far fa-calendar-times text-2xl"></i></div>
+                        <p class="text-gray-500 font-medium">No STA services scheduled on ${calcFormatDisplayDate(appState.selectedDateStr)}.</p>
+                        <p class="text-xs text-gray-400 mt-1">Select a highlighted date within your STA booking range on the calendar above.</p>
+                    </div>
+                `;
+                container.innerHTML = html;
+                return;
+            }
+
+            // 1. Render 24-Hour Visual Timetable
+            html += `
+                <div class="mt-2 overflow-x-auto rounded-xl border border-gray-200 shadow-inner bg-white">
+                    <table id="dailyScheduleTable" class="w-full table-fixed border-collapse">
+                        <thead>
+                            <tr>
+                                ${Array.from({ length: 24 }, (_, i) => `
+                                    <th class="text-[10px] text-gray-400 font-semibold bg-gray-50 py-1.5 border-r border-b border-gray-100 text-center">
+                                        ${(i % 12 === 0 ? 12 : i % 12) + (i < 12 ? 'a' : 'p')}
+                                    </th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                ${Array.from({ length: 24 }, (_, i) => `
+                                    <td data-hour="${i}" class="h-14 border-r border-gray-100 relative"></td>
+                                `).join('')}
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            // 2. Render Daily Cost Breakdown Table
+            let totalDayCost = 0;
+            let totalDaySwCost = 0;
+            const rowsHtml = dailyTableRows.map(row => {
+                totalDayCost += row.costDisplay;
+                totalDaySwCost += row.swCostDisplay;
+                const inst = row.instance;
+                const swRateText = inst.swRateKey
+                    ? `${formatNumber(inst.swUnitRate, true)}/${inst.unit === 'Hour' ? 'hr' : 'night'}`
+                    : '<span class="text-gray-400">N/A</span>';
+                const swCostText = row.isContinuation
+                    ? '<span class="text-xs font-normal text-gray-400">Included</span>'
+                    : (inst.swRateKey ? formatNumber(row.swCostDisplay, true) : '<span class="text-xs text-gray-400">$0.00</span>');
+
+                return `
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">${inst.supportItemNumber}</td>
+                        <td class="px-4 py-3">
+                            <span class="inline-block px-2.5 py-0.5 rounded-md text-xs font-semibold border ${inst.badgeClass}">
+                                ${inst.shortName}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600 text-xs font-medium">${row.timeDisplay}</td>
+                        <td class="px-4 py-3 text-center text-gray-700 font-mono text-xs font-semibold">${row.qtyDisplay}</td>
+                        <td class="px-4 py-3 text-right text-gray-500 font-mono text-xs">${formatNumber(inst.unitRate, true)}/${inst.unit}</td>
+                        <td class="px-4 py-3 text-right font-bold text-teal-700 text-sm">
+                            ${row.isContinuation ? '<span class="text-xs font-normal text-gray-400">Included</span>' : formatNumber(row.costDisplay, true)}
+                        </td>
+                        <td class="px-4 py-3 text-right text-amber-700 font-mono text-xs">${swRateText}</td>
+                        <td class="px-4 py-3 text-right font-bold text-amber-600 text-sm">${swCostText}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const totalDayMargin = totalDayCost - totalDaySwCost;
+
+            html += `
+                <div class="mt-6">
+                    <h5 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 ml-1">Daily Revenue &amp; SW Wage Breakdown (${calcFormatDisplayDate(appState.selectedDateStr)})</h5>
+                    <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm bg-white">
+                        <table class="w-full text-sm text-left border-collapse">
+                            <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-bold border-b border-gray-200">
+                                <tr>
+                                    <th class="px-4 py-3">Item Code</th>
+                                    <th class="px-4 py-3">Support Item</th>
+                                    <th class="px-4 py-3">Time Window / Details</th>
+                                    <th class="px-4 py-3 text-center">Qty</th>
+                                    <th class="px-4 py-3 text-right">NDIS Rate</th>
+                                    <th class="px-4 py-3 text-right">NDIS Charge</th>
+                                    <th class="px-4 py-3 text-right">SW Rate (${appState.selectedPayPoint})</th>
+                                    <th class="px-4 py-3 text-right">SW Wage Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${rowsHtml}
+                            </tbody>
+                            <tfoot class="bg-gray-50 font-bold border-t border-gray-200 text-gray-800">
+                                <tr>
+                                    <td colspan="5" class="px-4 py-3 text-right text-xs uppercase tracking-wider text-gray-500">Daily Totals (${calcFormatDisplayDate(appState.selectedDateStr)}) — Net Margin: <span class="text-emerald-600">${formatNumber(totalDayMargin, true)}</span></td>
+                                    <td class="px-4 py-3 text-right text-teal-600 text-base">${formatNumber(totalDayCost, true)}</td>
+                                    <td class="px-4 py-3 text-right text-xs text-gray-400">Wage Total:</td>
+                                    <td class="px-4 py-3 text-right text-amber-600 text-base">${formatNumber(totalDaySwCost, true)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            container.innerHTML = html;
+
+            // 3. Place Visual Blocks onto the 24-Hour Timetable
+            const table = container.querySelector('#dailyScheduleTable');
+            if (!table) return;
+
+            visualSlices.forEach(slice => {
+                const startHour = Math.floor(slice.startMin / 60);
+                if (startHour >= 24) return;
+                const startCell = table.querySelector(`td[data-hour="${startHour}"]`);
+                if (!startCell) return;
+
+                const blockDiv = document.createElement('div');
+                blockDiv.className = `service-block ${slice.instance.blockColor || 'bg-teal-600'} flex items-center justify-between px-2`;
+                blockDiv.title = `${slice.instance.shortName} (${slice.sliceLabel})`;
+                blockDiv.innerHTML = `
+                    <span class="truncate text-[10px] font-bold">${slice.instance.shortName}</span>
+                    <span class="text-[9px] opacity-90 ml-1 font-mono hidden sm:inline">${slice.sliceLabel}</span>
+                `;
+
+                blockDiv.style.top = '6px';
+                blockDiv.style.height = 'calc(100% - 12px)';
+                const startOffsetMinutes = slice.startMin % 60;
+                const durationMinutes = slice.endMin - slice.startMin;
+                blockDiv.style.left = `${(startOffsetMinutes / 60) * 100}%`;
+                blockDiv.style.width = `calc(${(durationMinutes / 60) * 100}% - 2px)`;
+
+                startCell.appendChild(blockDiv);
+            });
+        }
+
+        function renderDetectedHolidaysBanner() {
+            const banner = document.getElementById('detectedHolidaysBanner');
+            if (!banner) return;
+
+            const startDateStr = document.getElementById('staStartDate').value;
+            const endDateStr = document.getElementById('staEndDate').value;
+            if (!startDateStr || !endDateStr || !appState.includePublicHolidays) {
+                banner.classList.add('hidden');
+                return;
+            }
+
+            const matchedHolidays = [];
+            let cur = new Date(`${startDateStr}T00:00:00`);
+            const end = new Date(`${endDateStr}T00:00:00`);
+            while (cur <= end) {
+                if (calcIsPublicHoliday(cur)) {
+                    matchedHolidays.push(`${calcFormatDisplayDate(calcFormatDate(cur))} (${calcGetDayOfWeekString(cur)})`);
+                }
+                cur.setDate(cur.getDate() + 1);
+            }
+
+            if (matchedHolidays.length > 0) {
+                banner.classList.remove('hidden');
+                banner.innerHTML = `
+                    <i class="fas fa-calendar-star text-red-500"></i>
+                    <span><strong>${appState.selectedState} Public Holiday(s) in range:</strong> ${matchedHolidays.join(', ')} — Public Holiday rate applied for 06:00–22:00.</span>
+                `;
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function renderMetrics() {
+            const totalHrs = appState.totalStayHours;
+            const days = Math.floor(totalHrs / 24);
+            const remHrs = totalHrs % 24;
+            const payPointObj = SW_PAY_POINTS[appState.selectedPayPoint] || SW_PAY_POINTS['A'];
+
+            document.getElementById('metricTotalElapsed').textContent = `${totalHrs.toFixed(2)} hrs`;
+            document.getElementById('metricTotalElapsedSub').textContent = totalHrs > 0
+                ? `${days}d ${remHrs.toFixed(1)}h total stay`
+                : 'Select dates above';
+
+            document.getElementById('metricActiveHours').textContent = `${appState.totalActiveSupportHours.toFixed(2)} hrs`;
+            document.getElementById('metricSleepovers').textContent = `${appState.totalSleepovers} ${appState.totalSleepovers === 1 ? 'Night' : 'Nights'}`;
+            document.getElementById('metricMidnights').textContent = `${appState.midnightsCrossed} ${appState.midnightsCrossed === 1 ? 'Midnight' : 'Midnights'} Crossed`;
+
+            const ndisRev = appState.totalNdisRevenue;
+            const swWage = appState.totalSwWageCost;
+            const otherCosts = appState.totalOtherCosts;
+            const netMargin = ndisRev - swWage - otherCosts;
+            const marginPct = ndisRev > 0 ? ((netMargin / ndisRev) * 100) : 0;
+
+            document.getElementById('metricNdisRevenue').textContent = formatNumber(ndisRev, true);
+            document.getElementById('metricSwWageCost').textContent = formatNumber(swWage, true);
+            document.getElementById('metricSwPayPointSub').textContent = `${payPointObj.code}: ${payPointObj.classification}`;
+
+            const otherCostsEl = document.getElementById('metricOtherCosts');
+            const otherCostsSubEl = document.getElementById('metricOtherCostsSub');
+            if (otherCostsEl) otherCostsEl.textContent = formatNumber(otherCosts, true);
+            if (otherCostsSubEl) {
+                const count = appState.otherCosts.length;
+                otherCostsSubEl.textContent = `${count} Custom ${count === 1 ? 'Item' : 'Items'}`;
+            }
+
+            const marginEl = document.getElementById('metricNetMargin');
+            marginEl.textContent = formatNumber(netMargin, true);
+            marginEl.className = `text-lg font-extrabold ${netMargin >= 0 ? 'text-emerald-600' : 'text-red-600'}`;
+            document.getElementById('metricNetMarginPct').textContent = `${marginPct.toFixed(1)}% of NDIS Charge`;
+
+            const locBadge = document.getElementById('summaryLocationBadge');
+            if (locBadge) {
+                locBadge.textContent = `${appState.remoteness} Rates`;
+            }
+            const ppBadge = document.getElementById('summaryPayPointBadge');
+            if (ppBadge) {
+                ppBadge.textContent = `SW: ${payPointObj.classification} (${payPointObj.code})`;
+            }
+        }
+
+        function renderSummaryTable() {
+            const container = document.getElementById('summaryBoxContainer');
+            const grandTotalCell = document.getElementById('grandTotalCostCell');
+            const grandWageCell = document.getElementById('grandTotalWageCell');
+            const grandWageSub = document.getElementById('grandTotalWageSub');
+            const grandOtherCell = document.getElementById('grandTotalOtherCostCell');
+            const grandOtherSub = document.getElementById('grandTotalOtherCostSub');
+            const grandMarginCell = document.getElementById('grandTotalMarginCell');
+            const grandMarginSub = document.getElementById('grandTotalMarginSub');
+            if (!container) return;
+
+            const payPointObj = SW_PAY_POINTS[appState.selectedPayPoint] || SW_PAY_POINTS['A'];
+
+            if (appState.allServiceInstances.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-gray-400 italic">Enter valid Start Date &amp; Time and End Date &amp; Time to view STA cost summary.</div>`;
+                if (grandTotalCell) grandTotalCell.textContent = "$0.00";
+                if (grandWageCell) grandWageCell.textContent = "$0.00";
+                if (grandOtherCell) grandOtherCell.textContent = formatNumber(appState.totalOtherCosts, true);
+                if (grandMarginCell) grandMarginCell.textContent = formatNumber(-appState.totalOtherCosts, true);
+                return;
+            }
+
+            const categoryOrder = [
+                "Weekday Daytime",
+                "Weekday Evening",
+                "Saturday",
+                "Sunday",
+                "Public Holiday",
+                "Sleepover",
+                "Participant Accommodation",
+                "Support Worker Accommodation"
+            ];
+
+            const grouped = {};
+            let grandTotal = 0;
+            let grandWageTotal = 0;
+
+            appState.allServiceInstances.forEach(inst => {
+                grandTotal += inst.cost;
+                grandWageTotal += inst.swCost;
+                if (!grouped[inst.categoryKey]) {
+                    grouped[inst.categoryKey] = {
+                        code: inst.supportItemNumber,
+                        name: inst.supportItemName,
+                        unit: inst.unit,
+                        unitRate: inst.unitRate,
+                        swRateKey: inst.swRateKey,
+                        swRateLabel: inst.swRateLabel,
+                        swUnitRate: inst.swUnitRate,
+                        badgeClass: inst.badgeClass,
+                        qty: 0,
+                        cost: 0,
+                        swCost: 0
+                    };
+                }
+                grouped[inst.categoryKey].qty += inst.qty;
+                grouped[inst.categoryKey].cost += inst.cost;
+                grouped[inst.categoryKey].swCost += inst.swCost;
+            });
+
+            let rowsHtml = '';
+            categoryOrder.forEach(key => {
+                const g = grouped[key];
+                if (!g) return;
+                const qtyDisplay = g.unit === 'Hour'
+                    ? `${g.qty.toFixed(2)} hrs`
+                    : `${g.qty} ${g.unit === 'Day' ? (g.qty === 1 ? 'Day' : 'Days') : (g.qty === 1 ? 'Night' : 'Nights')}`;
+
+                const swRateDisplay = g.swRateKey
+                    ? `${formatNumber(g.swUnitRate, true)} / ${g.unit === 'Hour' ? 'Hour' : 'Sleepover'} <span class="block text-[10px] text-gray-400">${g.swRateLabel}</span>`
+                    : `<span class="text-xs text-gray-400">N/A (Non-Wage)</span>`;
+
+                const swSubtotalDisplay = g.swRateKey
+                    ? formatNumber(g.swCost, true)
+                    : `<span class="text-xs font-normal text-gray-400">$0.00</span>`;
+
+                const itemMargin = g.cost - g.swCost;
+
+                rowsHtml += `
+                    <tr class="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-none">
+                        <td class="py-3.5 px-3 font-mono text-xs font-semibold text-gray-500">${g.code}</td>
+                        <td class="py-3.5 px-3">
+                            <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold border ${g.badgeClass}">
+                                ${g.name}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-3 text-center font-bold text-sm text-gray-800">${qtyDisplay}</td>
+                        <td class="py-3.5 px-3 text-right font-mono text-xs text-gray-600">${formatNumber(g.unitRate, true)} / ${g.unit}</td>
+                        <td class="py-3.5 px-3 text-right font-extrabold text-sm text-teal-700">${formatNumber(g.cost, true)}</td>
+                        <td class="py-3.5 px-3 text-right font-mono text-xs text-amber-700">${swRateDisplay}</td>
+                        <td class="py-3.5 px-3 text-right font-extrabold text-sm text-amber-600">${swSubtotalDisplay}</td>
+                        <td class="py-3.5 px-3 text-right font-extrabold text-sm ${itemMargin >= 0 ? 'text-emerald-600' : 'text-red-600'}">${formatNumber(itemMargin, true)}</td>
+                    </tr>
+                `;
+            });
+
+            // Append custom Other Costs rows if any exist
+            if (appState.otherCosts.length > 0) {
+                rowsHtml += `
+                    <tr class="bg-rose-50/60 border-t-2 border-rose-100">
+                        <td colspan="8" class="py-2 px-3 text-[11px] font-bold text-rose-700 uppercase tracking-wider">
+                            <i class="fas fa-receipt mr-1.5"></i>Additional Other Costs (Deducted from Net Margin)
+                        </td>
+                    </tr>
+                `;
+                appState.otherCosts.forEach((item, idx) => {
+                    rowsHtml += `
+                        <tr class="hover:bg-rose-50/40 transition-colors border-b border-gray-100 last:border-none">
+                            <td class="py-3 px-3 font-mono text-xs font-semibold text-rose-500">OTHER_${String(idx + 1).padStart(2, '0')}</td>
+                            <td class="py-3 px-3">
+                                <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold border bg-rose-50 text-rose-800 border-rose-200">
+                                    ${item.description}
+                                </span>
+                            </td>
+                            <td class="py-3 px-3 text-center font-bold text-sm text-gray-700">1 Item</td>
+                            <td class="py-3 px-3 text-right font-mono text-xs text-gray-400">N/A</td>
+                            <td class="py-3 px-3 text-right font-mono text-xs text-gray-400">$0.00</td>
+                            <td class="py-3 px-3 text-right font-mono text-xs text-rose-600">Other Cost</td>
+                            <td class="py-3 px-3 text-right font-extrabold text-sm text-rose-600">${formatNumber(item.amount, true)}</td>
+                            <td class="py-3 px-3 text-right font-extrabold text-sm text-red-600">-${formatNumber(item.amount, true)}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            container.innerHTML = `
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">
+                            <th class="pb-3 px-3">Item Number</th>
+                            <th class="pb-3 px-3">Support Item / Cost Name</th>
+                            <th class="pb-3 px-3 text-center">Total Qty</th>
+                            <th class="pb-3 px-3 text-right">NDIS Rate</th>
+                            <th class="pb-3 px-3 text-right">NDIS Subtotal</th>
+                            <th class="pb-3 px-3 text-right">SW Rate (${payPointObj.code}) / Type</th>
+                            <th class="pb-3 px-3 text-right">Cost Subtotal</th>
+                            <th class="pb-3 px-3 text-right">Net Margin</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+            `;
+
+            const otherTotal = appState.totalOtherCosts;
+            const grandMargin = grandTotal - grandWageTotal - otherTotal;
+            const grandMarginPct = grandTotal > 0 ? ((grandMargin / grandTotal) * 100) : 0;
+
+            if (grandTotalCell) grandTotalCell.textContent = formatNumber(grandTotal, true);
+            if (grandWageCell) grandWageCell.textContent = formatNumber(grandWageTotal, true);
+            if (grandWageSub) grandWageSub.textContent = `${payPointObj.code}: ${payPointObj.classification}`;
+            if (grandOtherCell) grandOtherCell.textContent = formatNumber(otherTotal, true);
+            if (grandOtherSub) {
+                const count = appState.otherCosts.length;
+                grandOtherSub.textContent = `${count} Custom Cost ${count === 1 ? 'Item' : 'Items'}`;
+            }
+            if (grandMarginCell) {
+                grandMarginCell.textContent = formatNumber(grandMargin, true);
+                grandMarginCell.className = `text-2xl font-extrabold tracking-tight ${grandMargin >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+            }
+            if (grandMarginSub) {
+                grandMarginSub.textContent = `Margin Ratio: ${grandMarginPct.toFixed(1)}% of NDIS Charge`;
+            }
+        }
+
+        function renderPayPointComparisonTable() {
+            const container = document.getElementById('payPointComparisonContainer');
+            if (!container) return;
+
+            if (appState.allServiceInstances.length === 0) {
+                container.innerHTML = `<div class="text-center py-6 text-gray-400 italic">No booking active to compare Support Worker Pay Points.</div>`;
+                return;
+            }
+
+            // Aggregate hours/counts by SW rate key across current booking
+            const totalsBySwKey = {
+                weekday: 0,
+                afternoon: 0,
+                saturday: 0,
+                sunday: 0,
+                publicHoliday: 0,
+                sleepover: 0
+            };
+
+            appState.allServiceInstances.forEach(inst => {
+                if (inst.swRateKey && totalsBySwKey[inst.swRateKey] !== undefined) {
+                    totalsBySwKey[inst.swRateKey] += inst.qty;
+                }
+            });
+
+            const totalNdisRev = appState.totalNdisRevenue;
+            const otherCostsTotal = appState.totalOtherCosts;
+
+            let rowsHtml = '';
+            Object.keys(SW_PAY_POINTS).forEach(ppKey => {
+                const pp = SW_PAY_POINTS[ppKey];
+                const isSelected = ppKey === appState.selectedPayPoint;
+
+                const wageCost =
+                    (totalsBySwKey.weekday * pp.weekday) +
+                    (totalsBySwKey.afternoon * pp.afternoon) +
+                    (totalsBySwKey.saturday * pp.saturday) +
+                    (totalsBySwKey.sunday * pp.sunday) +
+                    (totalsBySwKey.publicHoliday * pp.publicHoliday) +
+                    (totalsBySwKey.sleepover * pp.sleepover);
+
+                const margin = totalNdisRev - wageCost - otherCostsTotal;
+                const marginPct = totalNdisRev > 0 ? ((margin / totalNdisRev) * 100) : 0;
+
+                rowsHtml += `
+                    <tr data-paypoint="${ppKey}" class="paypoint-row cursor-pointer transition-colors border-b border-gray-100 last:border-none ${isSelected ? 'bg-amber-50/80 font-semibold' : 'hover:bg-gray-50'}">
+                        <td class="py-3 px-3 whitespace-nowrap">
+                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-extrabold ${isSelected ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700'}">
+                                ${pp.code}
+                            </span>
+                        </td>
+                        <td class="py-3 px-3 text-sm text-gray-800 whitespace-nowrap">
+                            ${pp.classification}
+                            ${isSelected ? `<span class="ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800">Selected</span>` : ''}
+                        </td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-gray-600">${formatNumber(pp.weekday, true)}</td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-gray-600">${formatNumber(pp.afternoon, true)}</td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-gray-600">${formatNumber(pp.saturday, true)}</td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-gray-600">${formatNumber(pp.sunday, true)}</td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-gray-600">${formatNumber(pp.publicHoliday, true)}</td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-gray-400" title="Not used in STA (22:00-06:00 uses Sleepover)">${formatNumber(pp.night, true)}</td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-gray-600">${formatNumber(pp.sleepover, true)}</td>
+                        <td class="py-3 px-3 text-right font-extrabold text-sm text-amber-600">${formatNumber(wageCost, true)}</td>
+                        <td class="py-3 px-3 text-right font-bold text-xs text-rose-600">${formatNumber(otherCostsTotal, true)}</td>
+                        <td class="py-3 px-3 text-right font-extrabold text-sm ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}">
+                            ${formatNumber(margin, true)}
+                            <span class="block text-[10px] font-normal text-gray-500">${marginPct.toFixed(1)}%</span>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            container.innerHTML = `
+                <table class="min-w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">
+                            <th class="pb-3 px-3">Code</th>
+                            <th class="pb-3 px-3">Classification</th>
+                            <th class="pb-3 px-3 text-right">Weekday<br><span class="text-[10px] font-normal text-teal-600">(${totalsBySwKey.weekday.toFixed(1)}h)</span></th>
+                            <th class="pb-3 px-3 text-right">Afternoon<br><span class="text-[10px] font-normal text-teal-600">(${totalsBySwKey.afternoon.toFixed(1)}h)</span></th>
+                            <th class="pb-3 px-3 text-right">Saturday<br><span class="text-[10px] font-normal text-teal-600">(${totalsBySwKey.saturday.toFixed(1)}h)</span></th>
+                            <th class="pb-3 px-3 text-right">Sunday<br><span class="text-[10px] font-normal text-teal-600">(${totalsBySwKey.sunday.toFixed(1)}h)</span></th>
+                            <th class="pb-3 px-3 text-right">Public Hol<br><span class="text-[10px] font-normal text-teal-600">(${totalsBySwKey.publicHoliday.toFixed(1)}h)</span></th>
+                            <th class="pb-3 px-3 text-right text-gray-300">Night<br><span class="text-[10px] font-normal">(0.0h)</span></th>
+                            <th class="pb-3 px-3 text-right">Sleepover<br><span class="text-[10px] font-normal text-teal-600">(${totalsBySwKey.sleepover}x)</span></th>
+                            <th class="pb-3 px-3 text-right text-amber-600">Total SW Wage</th>
+                            <th class="pb-3 px-3 text-right text-rose-600">Other Costs</th>
+                            <th class="pb-3 px-3 text-right text-emerald-600">Net Margin</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+            `;
+        }
+
+        function renderChronologicalLog() {
+            const container = document.getElementById('serviceLogContainer');
+            const badge = document.getElementById('logCountBadge');
+            if (!container) return;
+
+            if (badge) badge.textContent = `${appState.allServiceInstances.length} Entries`;
+
+            if (appState.allServiceInstances.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-gray-400 italic">No entries calculated.</div>`;
+                return;
+            }
+
+            const rowsHtml = appState.allServiceInstances.map(inst => {
+                const qtyFormatted = inst.unit === 'Hour'
+                    ? `${inst.qty.toFixed(2)} hrs`
+                    : `${inst.qty} ${inst.unit}`;
+                const phTag = inst.isPH
+                    ? `<span class="ml-1.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold">PH</span>`
+                    : '';
+
+                const swRateFormatted = inst.swRateKey
+                    ? `${formatNumber(inst.swUnitRate, true)}/${inst.unit === 'Hour' ? 'hr' : 'night'}`
+                    : '-';
+                const swCostFormatted = inst.swRateKey
+                    ? formatNumber(inst.swCost, true)
+                    : '$0.00';
+
+                return `
+                    <tr class="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-none">
+                        <td class="py-3 px-3 text-sm font-medium text-gray-700 whitespace-nowrap">
+                            ${calcFormatDisplayDate(inst.dateStr)}
+                            <span class="text-xs text-gray-400 ml-1">(${inst.dayName})</span>
+                            ${phTag}
+                        </td>
+                        <td class="py-3 px-3 font-mono text-xs text-gray-500 whitespace-nowrap">${inst.supportItemNumber}</td>
+                        <td class="py-3 px-3">
+                            <span class="inline-block px-2 py-0.5 rounded-md text-xs font-semibold border ${inst.badgeClass}">
+                                ${inst.shortName}
+                            </span>
+                        </td>
+                        <td class="py-3 px-3 text-xs text-gray-600 font-medium">${inst.details}</td>
+                        <td class="py-3 px-3 text-center font-mono text-xs font-bold text-gray-700 whitespace-nowrap">${qtyFormatted}</td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">${formatNumber(inst.unitRate, true)}/${inst.unit}</td>
+                        <td class="py-3 px-3 text-right font-bold text-sm text-teal-700 whitespace-nowrap">${formatNumber(inst.cost, true)}</td>
+                        <td class="py-3 px-3 text-right font-mono text-xs text-amber-700 whitespace-nowrap">${swRateFormatted}</td>
+                        <td class="py-3 px-3 text-right font-bold text-sm text-amber-600 whitespace-nowrap">${swCostFormatted}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <table class="min-w-full text-left border-collapse">
+                    <thead class="bg-gray-50 border-b border-gray-200">
+                        <tr class="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                            <th class="py-3 px-3">Date</th>
+                            <th class="py-3 px-3">Item Code</th>
+                            <th class="py-3 px-3">Support Item</th>
+                            <th class="py-3 px-3">Time Window / Details</th>
+                            <th class="py-3 px-3 text-center">Qty</th>
+                            <th class="py-3 px-3 text-right">NDIS Rate</th>
+                            <th class="py-3 px-3 text-right">NDIS Charge</th>
+                            <th class="py-3 px-3 text-right">SW Rate (${appState.selectedPayPoint})</th>
+                            <th class="py-3 px-3 text-right">SW Wage Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+            `;
+        }
+
+        // ============================================================================
+        // 6. HOLIDAY LOADING, CSV EXPORT & PDF EXPORT
+        // ============================================================================
+        async function loadStateHolidays(stateCode) {
+            if (!stateCode) return;
+            const baseBuiltin = BUILTIN_STATE_HOLIDAYS[stateCode] || [];
+            appState.importedHolidays = [...new Set([...baseBuiltin, ...appState.customHolidays])];
+
+            try {
+                const response = await fetch(`./holidays_${stateCode.toLowerCase()}.ics`);
+                if (response.ok) {
+                    const icsData = await response.text();
+                    const parsedDates = parseICS(icsData);
+                    if (parsedDates.length > 0) {
+                        appState.importedHolidays = [...new Set([...baseBuiltin, ...parsedDates, ...appState.customHolidays])];
+                    }
+                }
+            } catch (e) {
+                // Uses built-in state holiday dataset seamlessly when opened via file:/// or preview
+            }
+            renderAll();
+        }
+
+        function exportToCsv() {
+            if (appState.allServiceInstances.length === 0) {
+                calcShowMessage("No STA calculation data to export.");
+                return;
+            }
+            const payPointObj = SW_PAY_POINTS[appState.selectedPayPoint] || SW_PAY_POINTS['A'];
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += [
+                "Date", "Day", "Support Item Number", "Support Item Name", "Details",
+                "Quantity", "Unit", "NDIS Unit Rate", "NDIS Charge",
+                `SW Pay Point (${payPointObj.code}) Rate`, "SW Wage / Other Cost", "Net Margin"
+            ].join(",") + "\r\n";
+
+            appState.allServiceInstances.forEach(inst => {
+                const row = [
+                    calcFormatDisplayDate(inst.dateStr),
+                    inst.dayName + (inst.isPH ? " (PH)" : ""),
+                    `"${inst.supportItemNumber}"`,
+                    `"${inst.supportItemName}"`,
+                    `"${inst.details}"`,
+                    inst.unit === 'Hour' ? inst.qty.toFixed(2) : inst.qty,
+                    inst.unit,
+                    inst.unitRate.toFixed(2),
+                    inst.cost.toFixed(2),
+                    inst.swUnitRate.toFixed(2),
+                    inst.swCost.toFixed(2),
+                    inst.netMargin.toFixed(2)
+                ];
+                csvContent += row.join(",") + "\r\n";
+            });
+
+            if (appState.otherCosts.length > 0) {
+                appState.otherCosts.forEach((item, idx) => {
+                    const row = [
+                        "Other Cost",
+                        "-",
+                        `"OTHER_${String(idx + 1).padStart(2, '0')}"`,
+                        `"${item.description.replace(/"/g, '""')}"`,
+                        `"Custom Other Cost"`,
+                        1,
+                        "Item",
+                        "0.00",
+                        "0.00",
+                        "0.00",
+                        item.amount.toFixed(2),
+                        (-item.amount).toFixed(2)
+                    ];
+                    csvContent += row.join(",") + "\r\n";
+                });
+            }
+
+            const netTotalMargin = appState.totalNdisRevenue - appState.totalSwWageCost - appState.totalOtherCosts;
+            csvContent += [
+                "TOTAL", "", "", `"Grand Totals (SW Wage: $${appState.totalSwWageCost.toFixed(2)} + Other Costs: $${appState.totalOtherCosts.toFixed(2)})"`, "",
+                "", "", "", appState.totalNdisRevenue.toFixed(2),
+                "", (appState.totalSwWageCost + appState.totalOtherCosts).toFixed(2), netTotalMargin.toFixed(2)
+            ].join(",") + "\r\n";
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `STA_Calculation_${document.getElementById('staStartDate').value || 'export'}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function exportToPdf() {
+            const { jsPDF } = window.jspdf;
+            if (!jsPDF) {
+                calcShowMessage("Error: jsPDF library not loaded.");
+                return;
+            }
+            if (appState.allServiceInstances.length === 0) {
+                calcShowMessage("No STA calculation data to export.");
+                return;
+            }
+
+            const doc = new jsPDF();
+            let yPos = 18;
+
+            const startDateStr = document.getElementById('staStartDate').value;
+            const startTimeStr = document.getElementById('staStartTime').value;
+            const endDateStr = document.getElementById('staEndDate').value;
+            const endTimeStr = document.getElementById('staEndTime').value;
+            const payPointObj = SW_PAY_POINTS[appState.selectedPayPoint] || SW_PAY_POINTS['A'];
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(16);
+            doc.text("NDIS Short Term Accommodation (STA) Quote & Costing", 105, yPos, { align: 'center' });
+            yPos += 10;
+
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Start Date & Time: ${calcFormatDisplayDate(startDateStr)} ${startTimeStr}`, 14, yPos);
+            doc.text(`End Date & Time: ${calcFormatDisplayDate(endDateStr)} ${endTimeStr}`, 110, yPos);
+            yPos += 6;
+            doc.text(`Location / Remoteness: ${appState.remoteness}`, 14, yPos);
+            doc.text(`Public Holidays: ${appState.includePublicHolidays ? `Yes (${appState.selectedState})` : 'No'}`, 110, yPos);
+            yPos += 6;
+            doc.text(`SW Classification: ${payPointObj.code} - ${payPointObj.classification}`, 14, yPos);
+            doc.text(`Sleepovers: ${appState.totalSleepovers}   |   Midnights (00:00) Crossed: ${appState.midnightsCrossed} Days`, 110, yPos);
+            yPos += 8;
+
+            // Summary Table
+            const categoryOrder = [
+                "Weekday Daytime", "Weekday Evening", "Saturday", "Sunday",
+                "Public Holiday", "Sleepover", "Participant Accommodation", "Support Worker Accommodation"
+            ];
+            const grouped = {};
+            let grandTotal = 0;
+            let grandWage = 0;
+            appState.allServiceInstances.forEach(inst => {
+                grandTotal += inst.cost;
+                grandWage += inst.swCost;
+                if (!grouped[inst.categoryKey]) {
+                    grouped[inst.categoryKey] = {
+                        code: inst.supportItemNumber,
+                        name: inst.supportItemName,
+                        unit: inst.unit,
+                        unitRate: inst.unitRate,
+                        swRateKey: inst.swRateKey,
+                        swUnitRate: inst.swUnitRate,
+                        qty: 0,
+                        cost: 0,
+                        swCost: 0
+                    };
+                }
+                grouped[inst.categoryKey].qty += inst.qty;
+                grouped[inst.categoryKey].cost += inst.cost;
+                grouped[inst.categoryKey].swCost += inst.swCost;
+            });
+
+            const summaryBody = [];
+            categoryOrder.forEach(key => {
+                const g = grouped[key];
+                if (!g) return;
+                summaryBody.push([
+                    g.code,
+                    g.name,
+                    g.unit === 'Hour' ? `${g.qty.toFixed(2)} hrs` : `${g.qty} ${g.unit}`,
+                    `${formatNumber(g.unitRate, true)}/${g.unit}`,
+                    formatNumber(g.cost, true),
+                    g.swRateKey ? formatNumber(g.swUnitRate, true) : 'N/A',
+                    formatNumber(g.swCost, true),
+                    formatNumber(g.cost - g.swCost, true)
+                ]);
+            });
+
+            appState.otherCosts.forEach((item, idx) => {
+                summaryBody.push([
+                    `OTHER_${String(idx + 1).padStart(2, '0')}`,
+                    `Other Cost: ${item.description}`,
+                    '1 Item',
+                    'N/A',
+                    '$0.00',
+                    'Other Cost',
+                    formatNumber(item.amount, true),
+                    `-${formatNumber(item.amount, true)}`
+                ]);
+            });
+
+            const totalAllCosts = grandWage + appState.totalOtherCosts;
+            const totalNetMargin = grandTotal - totalAllCosts;
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(12);
+            doc.text("STA Revenue, Support Worker Wage & Other Costs Summary", 14, yPos);
+            yPos += 4;
+
+            doc.autoTable({
+                startY: yPos,
+                head: [['Item Code', 'Support Item / Cost', 'Qty', 'NDIS Rate', 'NDIS Total', `SW Rate (${payPointObj.code})`, 'Cost Subtotal', 'Margin']],
+                body: summaryBody,
+                foot: [['', '', '', 'Totals', formatNumber(grandTotal, true), '', formatNumber(totalAllCosts, true), formatNumber(totalNetMargin, true)]],
+                theme: 'grid',
+                headStyles: { fillColor: [13, 148, 136], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+                footStyles: { fillColor: [240, 253, 250], textColor: [15, 118, 110], fontStyle: 'bold', fontSize: 8.5 },
+                bodyStyles: { fontSize: 8 }
+            });
+
+            doc.save(`STA_Quote_${startDateStr || 'plan'}.pdf`);
+        }
+
+        // ============================================================================
+        // 7. FLOATING CALCULATOR & INITIALIZATION
+        // ============================================================================
+        function initializeFloatingCalculator() {
+            const calculatorContainer = document.getElementById('calculatorContainer');
+            const floatingBtn = document.getElementById('floatingCalculatorBtn');
+            const display = document.getElementById('calculatorCurrentInput');
+            const historyDisplay = document.getElementById('calculatorHistory');
+            const buttons = document.querySelectorAll('.calc-btn');
+            let currentInput = '0';
+            let operator = null;
+            let previousInput = null;
+            let history = [];
+            let shouldResetDisplay = false;
+
+            const updateDisplay = () => {
+                display.textContent = currentInput;
+            };
+            const updateHistory = () => {
+                historyDisplay.innerHTML = history.slice(-2).map(item => `<div>${item}</div>`).join('');
+            };
+
+            buttons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const key = button.dataset.key;
+                    if (!isNaN(key)) {
+                        if (shouldResetDisplay) { currentInput = '0'; shouldResetDisplay = false; }
+                        currentInput = currentInput === '0' ? key : (currentInput.length < 16 ? currentInput + key : currentInput);
+                        updateDisplay();
+                    } else if (key === '.') {
+                        if (shouldResetDisplay) { currentInput = '0'; shouldResetDisplay = false; }
+                        if (!currentInput.includes('.')) currentInput += '.';
+                        updateDisplay();
+                    } else if (['+', '-', '*', '/'].includes(key)) {
+                        previousInput = parseFloat(currentInput);
+                        operator = key;
+                        shouldResetDisplay = true;
+                    } else if (key === '=') {
+                        if (operator && previousInput !== null) {
+                            const current = parseFloat(currentInput);
+                            let res = 0;
+                            if (operator === '+') res = previousInput + current;
+                            if (operator === '-') res = previousInput - current;
+                            if (operator === '*') res = previousInput * current;
+                            if (operator === '/') res = current === 0 ? 0 : previousInput / current;
+                            history.push(`${previousInput} ${operator} ${current} = ${Number(res.toFixed(4))}`);
+                            updateHistory();
+                            currentInput = String(Number(res.toFixed(4)));
+                            operator = null;
+                            previousInput = null;
+                            shouldResetDisplay = true;
+                            updateDisplay();
+                        }
+                    } else if (key === 'c') {
+                        currentInput = '0'; operator = null; previousInput = null; history = [];
+                        updateHistory(); updateDisplay();
+                    } else if (key === 'Backspace') {
+                        currentInput = currentInput.length > 1 ? currentInput.slice(0, -1) : '0';
+                        updateDisplay();
+                    } else if (key === '%') {
+                        currentInput = String(parseFloat(currentInput) / 100);
+                        updateDisplay();
+                    }
+                });
+            });
+
+            floatingBtn.addEventListener('click', () => {
+                calculatorContainer.classList.toggle('open');
+            });
+        }
+
+        function initializeDarkMode() {
+            const toggleCheckbox = document.getElementById('darkModeCheckbox');
+            const body = document.body;
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                body.classList.add('dark');
+                if (toggleCheckbox) toggleCheckbox.checked = true;
+            }
+            if (toggleCheckbox) {
+                toggleCheckbox.addEventListener('change', (e) => {
+                    const isDark = e.target.checked;
+                    body.classList.toggle('dark', isDark);
+                    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const placeholder = document.getElementById('calculatorContentPlaceholder');
+            buildCalculatorHTML(placeholder);
+            initializeFloatingCalculator();
+            initializeDarkMode();
+
+            // Set default dates: Today 09:00 to Tomorrow 17:00
+            const now = new Date();
+            const tomorrow = new Date(now);
+            tomorrow.setDate(now.getDate() + 1);
+
+            const startStr = calcFormatDate(now);
+            document.getElementById('staStartDate').value = startStr;
+            document.getElementById('staStartTime').value = '09:00';
+            document.getElementById('staEndDate').value = calcFormatDate(tomorrow);
+            document.getElementById('staEndTime').value = '17:00';
+
+            appState.calendarDate = new Date(now);
+            appState.selectedDateStr = startStr;
+
+            // Attach listeners for instant recalculation
+            ['staStartDate', 'staStartTime', 'staEndDate', 'staEndTime', 'remotenessSelect', 'payPointSelect', 'includePublicHolidays'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('change', () => {
+                        if (id === 'staStartDate') {
+                            const newStart = document.getElementById('staStartDate').value;
+                            if (newStart) {
+                                appState.selectedDateStr = newStart;
+                                appState.calendarDate = new Date(`${newStart}T00:00:00`);
+                            }
+                        }
+                        renderAll();
+                    });
+                    el.addEventListener('input', renderAll);
+                }
+            });
+
+            // Plus ("+") button to add custom Other Cost rows
+            const addOtherCostBtn = document.getElementById('addOtherCostBtn');
+            if (addOtherCostBtn) {
+                addOtherCostBtn.addEventListener('click', () => {
+                    addOtherCostRow();
+                });
+            }
+
+            // Click on Pay Point Comparison Table row to switch active Pay Point
+            const payPointComparisonContainer = document.getElementById('payPointComparisonContainer');
+            if (payPointComparisonContainer) {
+                payPointComparisonContainer.addEventListener('click', (e) => {
+                    const row = e.target.closest('.paypoint-row');
+                    if (row && row.dataset.paypoint) {
+                        const payPointSelect = document.getElementById('payPointSelect');
+                        if (payPointSelect) {
+                            payPointSelect.value = row.dataset.paypoint;
+                        }
+                        appState.selectedPayPoint = row.dataset.paypoint;
+                        renderAll();
+                    }
+                });
+            }
+
+            // Calendar click interactions (Select Day / Prev Month / Next Month)
+            const calendarViewContainer = document.getElementById('calendarViewContainer');
+            if (calendarViewContainer) {
+                calendarViewContainer.addEventListener('click', (e) => {
+                    const dayCell = e.target.closest('.calendar-day');
+                    if (dayCell && dayCell.dataset.date) {
+                        appState.selectedDateStr = dayCell.dataset.date;
+                        renderCalendar();
+                        renderDailyServices();
+                        return;
+                    }
+                    if (e.target.closest('#prevMonthBtn')) {
+                        appState.calendarDate.setMonth(appState.calendarDate.getMonth() - 1);
+                        renderCalendar();
+                    }
+                    if (e.target.closest('#nextMonthBtn')) {
+                        appState.calendarDate.setMonth(appState.calendarDate.getMonth() + 1);
+                        renderCalendar();
+                    }
+                });
+            }
+
+            // Day View Prev/Next Day navigation
+            const dailyServiceViewContainer = document.getElementById('dailyServiceViewContainer');
+            if (dailyServiceViewContainer) {
+                dailyServiceViewContainer.addEventListener('click', (e) => {
+                    if (e.target.closest('#prevDayBtn') && appState.selectedDateStr) {
+                        const d = new Date(`${appState.selectedDateStr}T00:00:00`);
+                        d.setDate(d.getDate() - 1);
+                        appState.selectedDateStr = calcFormatDate(d);
+                        appState.calendarDate = new Date(d);
+                        renderCalendar();
+                        renderDailyServices();
+                    }
+                    if (e.target.closest('#nextDayBtn') && appState.selectedDateStr) {
+                        const d = new Date(`${appState.selectedDateStr}T00:00:00`);
+                        d.setDate(d.getDate() + 1);
+                        appState.selectedDateStr = calcFormatDate(d);
+                        appState.calendarDate = new Date(d);
+                        renderCalendar();
+                        renderDailyServices();
+                    }
+                });
+            }
+
+            const stateSelectEl = document.getElementById('stateSelect');
+            if (stateSelectEl) {
+                stateSelectEl.addEventListener('change', (e) => {
+                    appState.selectedState = e.target.value;
+                    loadStateHolidays(appState.selectedState);
+                });
+            }
+
+            // Custom .ics import
+            const importIcsBtn = document.getElementById('importIcsBtn');
+            const icsFileInput = document.getElementById('icsFileInput');
+            if (importIcsBtn && icsFileInput) {
+                importIcsBtn.addEventListener('click', () => icsFileInput.click());
+                icsFileInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const parsed = parseICS(ev.target.result);
+                        if (parsed.length > 0) {
+                            appState.customHolidays = [...new Set([...appState.customHolidays, ...parsed])];
+                            appState.importedHolidays = [...new Set([...appState.importedHolidays, ...parsed])];
+                            calcShowMessage(`Successfully imported ${parsed.length} public holiday dates.`);
+                            renderAll();
+                        } else {
+                            calcShowMessage("No valid holiday dates found in the .ics file.");
+                        }
+                        icsFileInput.value = '';
+                    };
+                    reader.readAsText(file);
+                });
+            }
+
+            document.getElementById('calcMessageBoxButton').addEventListener('click', () => {
+                document.getElementById('calcMessageBoxOverlay').style.display = 'none';
+            });
+
+            document.getElementById('exportCsvBtn').addEventListener('click', exportToCsv);
+            document.getElementById('exportPdfBtn').addEventListener('click', exportToPdf);
+
+            loadStateHolidays(appState.selectedState);
+        });
+    </script>
+</body>
+</html>
