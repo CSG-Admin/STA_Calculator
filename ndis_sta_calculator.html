@@ -660,6 +660,8 @@
             selectedDateStr: null
         };
 
+        const MAX_STAY_DAYS = 365;
+
         function getSwUnitRate(payPointKey, categoryKey) {
             const payPoint = SW_PAY_POINTS[payPointKey] || SW_PAY_POINTS['A'];
             const itemInfo = STA_CATALOG[categoryKey];
@@ -672,11 +674,22 @@
                 return isCurrency ? "$0.00" : "0.00";
             }
             const num = Number(value);
-            let formattedNum = num.toFixed(decimalPlaces);
+            let formattedNum = Math.abs(num).toFixed(decimalPlaces);
+            // Sign goes before the "$" (-$12.00, not $-12.00); values that round to zero get no sign
+            const sign = num < 0 && Number(formattedNum) !== 0 ? '-' : '';
             const parts = formattedNum.split('.');
             parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
             formattedNum = parts.join('.');
-            return isCurrency ? `$${formattedNum}` : formattedNum;
+            return isCurrency ? `${sign}$${formattedNum}` : `${sign}${formattedNum}`;
+        }
+
+        function escapeHtml(text) {
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         function calcFormatDate(dateObj) {
@@ -1088,11 +1101,11 @@
             row.dataset.costId = costId;
             row.innerHTML = `
                 <div class="flex-grow">
-                    <input type="text" class="other-cost-desc w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400" placeholder="What is this cost? (e.g., Hotel, Meals, Tickets)" value="${defaultDesc}">
+                    <input type="text" class="other-cost-desc w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400" placeholder="What is this cost? (e.g., Hotel, Meals, Tickets)" value="${escapeHtml(defaultDesc)}">
                 </div>
                 <div class="relative w-32 sm:w-36 flex-shrink-0">
                     <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-gray-400 text-xs font-bold pointer-events-none">$</span>
-                    <input type="number" step="0.01" min="0" class="other-cost-amount w-full pl-6 pr-2 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 text-right placeholder-gray-400" placeholder="0.00" value="${defaultAmount}">
+                    <input type="number" step="0.01" min="0" class="other-cost-amount w-full pl-6 pr-2 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 text-right placeholder-gray-400" placeholder="0.00" value="${escapeHtml(defaultAmount)}">
                 </div>
                 <button type="button" class="remove-other-cost-btn p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0" title="Remove Cost Item">
                     <i class="fas fa-trash-alt text-xs"></i>
@@ -1157,6 +1170,16 @@
             if (isNaN(bookingStart) || isNaN(bookingEnd) || bookingEnd <= bookingStart) {
                 if (badgeEl) {
                     badgeEl.textContent = "End Date & Time must be after Start Date & Time";
+                    badgeEl.className = "text-xs font-semibold px-3 py-1 rounded-full bg-red-100 text-red-700";
+                }
+                return;
+            }
+
+            // Guards against runaway ranges while a year is half-typed (e.g. start 0002-01-01 -> end 2026-...),
+            // which would otherwise loop over hundreds of thousands of days and freeze the page
+            if ((bookingEnd.getTime() - bookingStart.getTime()) / 86400000 > MAX_STAY_DAYS) {
+                if (badgeEl) {
+                    badgeEl.textContent = `Booking is longer than ${MAX_STAY_DAYS} days - please check the dates`;
                     badgeEl.className = "text-xs font-semibold px-3 py-1 rounded-full bg-red-100 text-red-700";
                 }
                 return;
@@ -1364,7 +1387,8 @@
                 const endDate = new Date(`${endDateStr}T00:00:00`);
                 if (endDate >= startDate) {
                     const diffTime = Math.abs(endDate - startDate);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                    // Round, not ceil: a range spanning the end of daylight saving is 1 hour longer than whole days
+                    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
                     const weeks = Math.floor(diffDays / 7);
                     const days = diffDays % 7;
                     displayEl.innerHTML = `
@@ -1493,6 +1517,9 @@
             // Find all visual time blocks overlapping [selectedDayObj 00:00, nextDayObj 00:00]
             const visualSlices = [];
             const dailyTableRows = [];
+            // Wall-clock minutes past midnight (not elapsed time), so blocks land in the right
+            // hour column on daylight-saving change days
+            const toDayMinutes = d => d >= nextDayObj ? 1440 : d.getHours() * 60 + d.getMinutes();
 
             appState.allServiceInstances.forEach(inst => {
                 if (inst.segStart && inst.segEnd) {
@@ -1500,9 +1527,8 @@
                     const clipEnd = inst.segEnd < nextDayObj ? inst.segEnd : nextDayObj;
 
                     if (clipEnd > clipStart) {
-                        const startMin = (clipStart.getTime() - selectedDayObj.getTime()) / 60000;
-                        const endMin = (clipEnd.getTime() - selectedDayObj.getTime()) / 60000;
-                        const sliceHours = (endMin - startMin) / 60;
+                        const startMin = toDayMinutes(clipStart);
+                        const endMin = toDayMinutes(clipEnd);
 
                         visualSlices.push({
                             instance: inst,
@@ -1709,7 +1735,8 @@
 
             const startDateStr = document.getElementById('staStartDate').value;
             const endDateStr = document.getElementById('staEndDate').value;
-            if (!startDateStr || !endDateStr || !appState.includePublicHolidays) {
+            // Only scan when the booking itself is valid (also avoids scanning a huge half-typed date range)
+            if (!startDateStr || !endDateStr || !appState.includePublicHolidays || appState.allServiceInstances.length === 0) {
                 banner.classList.add('hidden');
                 return;
             }
@@ -1727,7 +1754,7 @@
             if (matchedHolidays.length > 0) {
                 banner.classList.remove('hidden');
                 banner.innerHTML = `
-                    <i class="fas fa-calendar-star text-red-500"></i>
+                    <i class="fas fa-calendar-day text-red-500"></i>
                     <span><strong>${appState.selectedState} Public Holiday(s) in range:</strong> ${matchedHolidays.join(', ')} — Public Holiday rate applied for 06:00–22:00.</span>
                 `;
             } else {
@@ -1796,12 +1823,21 @@
 
             const payPointObj = SW_PAY_POINTS[appState.selectedPayPoint] || SW_PAY_POINTS['A'];
 
+            const otherCount = appState.otherCosts.length;
+            if (grandWageSub) grandWageSub.textContent = `${payPointObj.code}: ${payPointObj.classification}`;
+            if (grandOtherCell) grandOtherCell.textContent = formatNumber(appState.totalOtherCosts, true);
+            if (grandOtherSub) grandOtherSub.textContent = `${otherCount} Custom Cost ${otherCount === 1 ? 'Item' : 'Items'}`;
+
             if (appState.allServiceInstances.length === 0) {
                 container.innerHTML = `<div class="text-center py-8 text-gray-400 italic">Enter valid Start Date &amp; Time and End Date &amp; Time to view STA cost summary.</div>`;
+                const emptyMargin = -appState.totalOtherCosts;
                 if (grandTotalCell) grandTotalCell.textContent = "$0.00";
                 if (grandWageCell) grandWageCell.textContent = "$0.00";
-                if (grandOtherCell) grandOtherCell.textContent = formatNumber(appState.totalOtherCosts, true);
-                if (grandMarginCell) grandMarginCell.textContent = formatNumber(-appState.totalOtherCosts, true);
+                if (grandMarginCell) {
+                    grandMarginCell.textContent = formatNumber(emptyMargin, true);
+                    grandMarginCell.className = `text-2xl font-extrabold tracking-tight ${emptyMargin >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+                }
+                if (grandMarginSub) grandMarginSub.textContent = 'NDIS Charge minus SW Wage & Other Costs';
                 return;
             }
 
@@ -1894,7 +1930,7 @@
                             <td class="py-3 px-3 font-mono text-xs font-semibold text-rose-500">OTHER_${String(idx + 1).padStart(2, '0')}</td>
                             <td class="py-3 px-3">
                                 <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold border bg-rose-50 text-rose-800 border-rose-200">
-                                    ${item.description}
+                                    ${escapeHtml(item.description)}
                                 </span>
                             </td>
                             <td class="py-3 px-3 text-center font-bold text-sm text-gray-700">1 Item</td>
@@ -1932,12 +1968,6 @@
 
             if (grandTotalCell) grandTotalCell.textContent = formatNumber(grandTotal, true);
             if (grandWageCell) grandWageCell.textContent = formatNumber(grandWageTotal, true);
-            if (grandWageSub) grandWageSub.textContent = `${payPointObj.code}: ${payPointObj.classification}`;
-            if (grandOtherCell) grandOtherCell.textContent = formatNumber(otherTotal, true);
-            if (grandOtherSub) {
-                const count = appState.otherCosts.length;
-                grandOtherSub.textContent = `${count} Custom Cost ${count === 1 ? 'Item' : 'Items'}`;
-            }
             if (grandMarginCell) {
                 grandMarginCell.textContent = formatNumber(grandMargin, true);
                 grandMarginCell.className = `text-2xl font-extrabold tracking-tight ${grandMargin >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
@@ -2124,6 +2154,8 @@
                 const response = await fetch(`./holidays_${stateCode.toLowerCase()}.ics`);
                 if (response.ok) {
                     const icsData = await response.text();
+                    // A newer state was picked while this file loaded - don't overwrite its holidays
+                    if (appState.selectedState !== stateCode) return;
                     const parsedDates = parseICS(icsData);
                     if (parsedDates.length > 0) {
                         appState.importedHolidays = [...new Set([...baseBuiltin, ...parsedDates, ...appState.customHolidays])];
@@ -2141,8 +2173,7 @@
                 return;
             }
             const payPointObj = SW_PAY_POINTS[appState.selectedPayPoint] || SW_PAY_POINTS['A'];
-            let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += [
+            let csvContent = [
                 "Date", "Day", "Support Item Number", "Support Item Name", "Details",
                 "Quantity", "Unit", "NDIS Unit Rate", "NDIS Charge",
                 `SW Pay Point (${payPointObj.code}) Rate`, "SW Wage / Other Cost", "Net Margin"
@@ -2193,17 +2224,22 @@
                 "", (appState.totalSwWageCost + appState.totalOtherCosts).toFixed(2), netTotalMargin.toFixed(2)
             ].join(",") + "\r\n";
 
-            const encodedUri = encodeURI(csvContent);
+            // Blob instead of an encodeURI data: URL - a "#" in a description would cut the file short there.
+            // The BOM makes Excel read the file as UTF-8 (keeps "→" and "–" in the Details column intact).
+            const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
+            link.setAttribute("href", url);
             link.setAttribute("download", `STA_Calculation_${document.getElementById('staStartDate').value || 'export'}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
         function exportToPdf() {
-            const { jsPDF } = window.jspdf;
+            // window.jspdf is undefined if the CDN script failed to load, so don't destructure it directly
+            const jsPDF = window.jspdf && window.jspdf.jsPDF;
             if (!jsPDF) {
                 calcShowMessage("Error: jsPDF library not loaded.");
                 return;
@@ -2214,6 +2250,10 @@
             }
 
             const doc = new jsPDF();
+            if (typeof doc.autoTable !== 'function') {
+                calcShowMessage("Error: jsPDF AutoTable plugin not loaded.");
+                return;
+            }
             let yPos = 18;
 
             const startDateStr = document.getElementById('staStartDate').value;
@@ -2340,6 +2380,24 @@
             const updateHistory = () => {
                 historyDisplay.innerHTML = history.slice(-2).map(item => `<div>${item}</div>`).join('');
             };
+            const compute = (a, op, b) => {
+                if (op === '+') return a + b;
+                if (op === '-') return a - b;
+                if (op === '*') return a * b;
+                if (op === '/') return b === 0 ? NaN : a / b;
+                return b;
+            };
+            const formatResult = (n) => Number.isFinite(n) ? String(Number(n.toFixed(4))) : 'Error';
+            // Runs the pending operation, records it in history and shows the result
+            const evaluatePending = () => {
+                const current = parseFloat(currentInput);
+                const res = compute(previousInput, operator, current);
+                history.push(`${previousInput} ${operator} ${current} = ${formatResult(res)}`);
+                updateHistory();
+                currentInput = formatResult(res);
+                updateDisplay();
+                return res;
+            };
 
             buttons.forEach(button => {
                 button.addEventListener('click', () => {
@@ -2353,34 +2411,45 @@
                         if (!currentInput.includes('.')) currentInput += '.';
                         updateDisplay();
                     } else if (['+', '-', '*', '/'].includes(key)) {
+                        if (isNaN(parseFloat(currentInput))) return; // showing "Error"
+                        // Chain "2 + 3 +" into 5 before taking the next number (pressing two operators in a row just swaps the operator)
+                        if (operator && previousInput !== null && !shouldResetDisplay) {
+                            const res = evaluatePending();
+                            if (!Number.isFinite(res)) {
+                                operator = null;
+                                previousInput = null;
+                                shouldResetDisplay = true;
+                                return;
+                            }
+                        }
                         previousInput = parseFloat(currentInput);
                         operator = key;
                         shouldResetDisplay = true;
                     } else if (key === '=') {
                         if (operator && previousInput !== null) {
-                            const current = parseFloat(currentInput);
-                            let res = 0;
-                            if (operator === '+') res = previousInput + current;
-                            if (operator === '-') res = previousInput - current;
-                            if (operator === '*') res = previousInput * current;
-                            if (operator === '/') res = current === 0 ? 0 : previousInput / current;
-                            history.push(`${previousInput} ${operator} ${current} = ${Number(res.toFixed(4))}`);
-                            updateHistory();
-                            currentInput = String(Number(res.toFixed(4)));
+                            evaluatePending();
                             operator = null;
                             previousInput = null;
                             shouldResetDisplay = true;
-                            updateDisplay();
                         }
                     } else if (key === 'c') {
-                        currentInput = '0'; operator = null; previousInput = null; history = [];
+                        currentInput = '0'; operator = null; previousInput = null; history = []; shouldResetDisplay = false;
                         updateHistory(); updateDisplay();
                     } else if (key === 'Backspace') {
-                        currentInput = currentInput.length > 1 ? currentInput.slice(0, -1) : '0';
+                        if (shouldResetDisplay || isNaN(parseFloat(currentInput))) {
+                            currentInput = '0';
+                            shouldResetDisplay = false;
+                        } else {
+                            const trimmed = currentInput.slice(0, -1);
+                            currentInput = (trimmed === '' || trimmed === '-') ? '0' : trimmed;
+                        }
                         updateDisplay();
                     } else if (key === '%') {
-                        currentInput = String(parseFloat(currentInput) / 100);
-                        updateDisplay();
+                        const value = parseFloat(currentInput);
+                        if (!isNaN(value)) {
+                            currentInput = String(value / 100);
+                            updateDisplay();
+                        }
                     }
                 });
             });
@@ -2393,7 +2462,9 @@
         function initializeDarkMode() {
             const toggleCheckbox = document.getElementById('darkModeCheckbox');
             const body = document.body;
-            const savedTheme = localStorage.getItem('theme');
+            // localStorage can throw (blocked site data / some private modes); that must not stop the app from starting
+            let savedTheme = null;
+            try { savedTheme = localStorage.getItem('theme'); } catch (e) { /* theme just isn't remembered */ }
             if (savedTheme === 'dark') {
                 body.classList.add('dark');
                 if (toggleCheckbox) toggleCheckbox.checked = true;
@@ -2402,7 +2473,7 @@
                 toggleCheckbox.addEventListener('change', (e) => {
                     const isDark = e.target.checked;
                     body.classList.toggle('dark', isDark);
-                    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                    try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (err) { /* not persisted */ }
                 });
             }
         }
@@ -2412,20 +2483,6 @@
             buildCalculatorHTML(placeholder);
             initializeFloatingCalculator();
             initializeDarkMode();
-
-            // Set default dates: Today 09:00 to Tomorrow 17:00
-            const now = new Date();
-            const tomorrow = new Date(now);
-            tomorrow.setDate(now.getDate() + 1);
-
-            const startStr = calcFormatDate(now);
-            document.getElementById('staStartDate').value = startStr;
-            document.getElementById('staStartTime').value = '09:00';
-            document.getElementById('staEndDate').value = calcFormatDate(tomorrow);
-            document.getElementById('staEndTime').value = '17:00';
-
-            appState.calendarDate = new Date(now);
-            appState.selectedDateStr = startStr;
 
             // Attach listeners for instant recalculation
             ['staStartDate', 'staStartTime', 'staEndDate', 'staEndTime', 'remotenessSelect', 'payPointSelect', 'includePublicHolidays'].forEach(id => {
@@ -2480,12 +2537,16 @@
                         renderDailyServices();
                         return;
                     }
+                    // Step from the 1st of the month: setMonth() on the 29th-31st overflows
+                    // (e.g. 31 Mar -> "31 Feb" = 3 Mar), so the calendar wouldn't move
+                    const shownYear = appState.calendarDate.getFullYear();
+                    const shownMonth = appState.calendarDate.getMonth();
                     if (e.target.closest('#prevMonthBtn')) {
-                        appState.calendarDate.setMonth(appState.calendarDate.getMonth() - 1);
+                        appState.calendarDate = new Date(shownYear, shownMonth - 1, 1);
                         renderCalendar();
                     }
                     if (e.target.closest('#nextMonthBtn')) {
-                        appState.calendarDate.setMonth(appState.calendarDate.getMonth() + 1);
+                        appState.calendarDate = new Date(shownYear, shownMonth + 1, 1);
                         renderCalendar();
                     }
                 });
